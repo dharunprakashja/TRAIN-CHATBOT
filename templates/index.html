@@ -1,28 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>RailBot</title>
+    <title>RailBot Classic</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body>
 
     <div class="container">
-        <div class="header">🚆 RailBot</div>
-
-        <div class="chat-window" id="chat-window">
-            <div class="message bot">
-                <div class="bubble">👋 Hi! Where do you want to go?</div>
+        <div class="header">
+            RailBot
+            <div style="float: right">
+                <form action="{{ url_for('clear_chat') }}" method="POST" onsubmit="return confirm('Are you sure you want to delete chat history?');">
+                    <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px;">
+                        Clear Chat
+                    </button>
+                </form>
             </div>
         </div>
 
-        <form class="input-area" id="chat-form">
-            <input type="text" id="chat-input" placeholder="Type here..." required autocomplete="off">
+        <div class="chat-window">
+            
+            <div class="message bot">
+                <div class="bubble">👋 Hello! I am RailBot. Let me assist you to book train tickets. Where would you like to go?</div>
+            </div>
+
+            {% for chat in chats %}
+            <div class="message user">
+                <div class="bubble">{{ chat.user }}</div>
+            </div>
+            <div class="message bot">
+                <div class="bubble">{{ chat.bot }}</div>
+            </div>
+            {% endfor %}
+            
+        </div>
+
+        <form method="POST" action="/" class="input-area">
+            <input type="text" name="message" placeholder="Type your message..." required autocomplete="off" autofocus>
             <button type="submit">Send</button>
         </form>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        window.onload = function() {
+            var chatWindow = document.querySelector('.chat-window');
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        };
+    </script>
 
 </body>
 </html>
