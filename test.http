@@ -1,0 +1,42 @@
+POST http://127.0.0.1:5000/trains
+Content-Type: application/json
+
+{
+    "name": "Coimbatore Express",
+    "start": "CBE",
+    "end": "Salem",
+    "departure": "06:50 PM",
+    "arrival": "10:20 AM",
+    "duration": "10h 30m",
+    "seats": 50,
+    "price": 1200
+}
+
+###
+
+GET http://127.0.0.1:5000/trains
+
+###
+
+PUT http://127.0.0.1:5000/trains/6
+Content-Type: application/json
+
+{
+    "price": 1500,
+    "seats": 200
+}
+
+###
+
+DELETE http://127.0.0.1:5000/trains/6
+
+###
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+    "message": "i want to go to cbe"
+}
+
+###
+DELETE http://127.0.0.1:5000/delete_chat_history

@@ -1,0 +1,7 @@
+{
+    "files.exclude": {
+        "**/.venv": true,
+        "**/migrations": true,
+         "**/__pycache__": true,
+    }
+}
