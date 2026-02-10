@@ -24,19 +24,28 @@ db.init_app(app)
 migrate = Migrate(app, db)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
+# Global store to capture the last book_ticket result
+_last_booking_result = None
+
 
 def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: str):
     """
     Books tickets and returns a JSON object.
     """
+    global _last_booking_result
+
     with app.app_context():
         train = db.session.get(Train, train_id)
 
         if not train:
-            return json.dumps({"status": "error", "message": "Train ID not found."})
+            result = json.dumps({"status": "error", "message": "Train ID not found."})
+            _last_booking_result = None
+            return result
 
         if train.seats < quantity:
-            return json.dumps({"status": "error", "message": f"Only {train.seats} seats remaining."})
+            result = json.dumps({"status": "error", "message": f"Only {train.seats} seats remaining."})
+            _last_booking_result = None
+            return result
 
         train_prefix = train.name[0].upper()
         assigned_seats = []
@@ -52,6 +61,7 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
 
         train.seats -= quantity
         db.session.commit()
+
         response_data = {
             "status": "success",
             "pnr": pnr_raw,
@@ -63,10 +73,13 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
             },
             "booking_details": {
                 "seats_count": quantity,
-                "seat_numbers": seat_str,
+                "seat_numbers": assigned_seats,   # list, not a joined string
                 "total_price": total_cost
             }
         }
+
+        # Cache the structured booking result so chat_api can forward it to the frontend
+        _last_booking_result = response_data
 
         return json.dumps(response_data)
 
@@ -114,7 +127,7 @@ You are RailBot, the official Digital Concierge. You are professional and proact
 - Missing Routes: List all available routes in the system line-by-line if a search fails.
 - No Emojis in Tickets: Keep the final ticket block clean text only as defined below.
 
-# UT FORMAT (SOUTPTRICT):
+# TICKET FORMAT (STRICT):
 When a booking is successful, the output MUST look exactly like this, with every detail on a NEW LINE:
 
 SUCCESS TRANSACTION COMPLETE
@@ -137,7 +150,7 @@ def home():
     if request.method == 'POST':
         user_input = request.form.get('message')
         if user_input:
-            bot_reply = get_gemini_response(user_input)
+            bot_reply, _ = get_gemini_response(user_input)
             return jsonify({'response': bot_reply})
         return jsonify({'error': 'No message provided'}), 400
     history = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(5).all()
@@ -146,17 +159,45 @@ def home():
 
 @app.route('/chat', methods=['POST'])
 def chat_api():
-    user_input = request.json.get('message')
-    bot_reply = get_gemini_response(user_input)
-    is_booked = "SUCCESS TRANSACTION COMPLETE" in bot_reply
+    global _last_booking_result
+    _last_booking_result = None  # Reset before each request
 
-    return jsonify({
+    user_input = request.json.get('message')
+    bot_reply, booking_data = get_gemini_response(user_input)
+
+    is_booked = booking_data is not None and booking_data.get("status") == "success"
+
+    payload = {
         "response": bot_reply,
-        "is_booked": is_booked
-    })
+        "is_booked": is_booked,
+    }
+
+    if is_booked:
+        payload["ticket"] = {
+            "pnr": booking_data["pnr"],
+            "passenger": {
+                "name": booking_data["passenger"]["name"],
+                "gender": booking_data["passenger"]["gender"],
+                "mobile": booking_data["passenger"]["mobile"],
+            },
+            "train": {
+                "name": booking_data["train_details"]["name"],
+                "route": booking_data["train_details"]["route"],
+                "timing": booking_data["train_details"]["timing"],
+            },
+            "booking": {
+                "seats": booking_data["booking_details"]["seats_count"],
+                "seat_numbers": booking_data["booking_details"]["seat_numbers"],
+                "total_price": booking_data["booking_details"]["total_price"],
+            }
+        }
+
+    return jsonify(payload)
 
 
 def get_gemini_response(user_message):
+    global _last_booking_result
+
     past_chats = ChatHistory.query.order_by(
         ChatHistory.id.desc()).limit(6).all()
 
@@ -185,8 +226,7 @@ def get_gemini_response(user_message):
     new_chat = ChatHistory(user=user_message, bot=bot_reply)
     db.session.add(new_chat)
     db.session.commit()
-
-    return bot_reply
+    return bot_reply, _last_booking_result
 
 
 @app.route('/clear_chat', methods=['POST'])
