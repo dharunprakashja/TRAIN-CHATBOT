@@ -1,55 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RailBot Classic</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-
 <body>
 
     <div class="container">
         <div class="header">
-            RailBot
+            <span>RailBot</span>
             <div style="float: right">
-                <form action="{{ url_for('clear_chat') }}" method="POST" onsubmit="return confirm('Are you sure you want to delete chat history?');">
-                    <button type="submit" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px;">
-                        Clear Chat
-                    </button>
+                <form id="clear-form" action="{{ url_for('clear_chat') }}" method="POST">
+                    <button type="submit" class="clear-btn">Clear Chat</button>
                 </form>
             </div>
         </div>
 
-        <div class="chat-window">
-            
+        <div class="chat-window" id="chat-box">
             <div class="message bot">
-                <div class="bubble">👋 Hello! I am RailBot. Let me assist you to book train tickets. Where would you like to go?</div>
+                <div class="bubble">Hello!!!!!!!! I am RailBot. Let me assist you to book train tickets. Where would you like to go?</div>
             </div>
-
             {% for chat in chats %}
-            <div class="message user">
-                <div class="bubble">{{ chat.user }}</div>
-            </div>
-            <div class="message bot">
-                <div class="bubble">{{ chat.bot }}</div>
-            </div>
+            <div class="message user"><div class="bubble">{{ chat.user }}</div></div>
+            <div class="message bot"><div class="bubble">{{ chat.bot|safe }}</div></div>
             {% endfor %}
-            
         </div>
 
-        <form method="POST" action="/" class="input-area">
-            <input type="text" name="message" placeholder="Type your message..." required autocomplete="off" autofocus>
-            <button type="submit">Send</button>
-        </form>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Type your message..." required autocomplete="off" autofocus>
+            <button id="send-btn">Send</button>
+        </div>
     </div>
 
-    <script>
-        window.onload = function() {
-            var chatWindow = document.querySelector('.chat-window');
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        };
-    </script>
-
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>
 </html>

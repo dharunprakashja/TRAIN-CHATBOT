@@ -47,7 +47,7 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
             assigned_seats.append(f"{train_prefix}{seat_num}")
 
         seat_str = ", ".join(assigned_seats)
-        total_cost = train.price*quantity
+        total_cost = train.price * quantity
         pnr_raw = f"T{train.id}{random.randint(1000, 9999)}{quantity}"
 
         train.seats -= quantity
@@ -67,10 +67,10 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
                 "total_price": total_cost
             }
         }
-        
+
         return json.dumps(response_data)
-    
-    
+
+
 def get_system_instruction():
     with app.app_context():
         trains = Train.query.all()
@@ -84,8 +84,7 @@ def get_system_instruction():
 # ROLE & PERSONA
 You are RailBot, the official Digital Concierge. You are professional and proactive. 
 - Emoji Mandate: Use relevant emojis in conversation.
-- Privacy: NEVER show [DB
-_ID] to the user.
+- Privacy: NEVER show [DB_ID] to the user.
 
 # LIVE TRAIN DATA
 {train_data}
@@ -133,6 +132,30 @@ PNR: [PNR Number]
 """
 
 
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    if request.method == 'POST':
+        user_input = request.form.get('message')
+        if user_input:
+            bot_reply = get_gemini_response(user_input)
+            return jsonify({'response': bot_reply})
+        return jsonify({'error': 'No message provided'}), 400
+    history = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(5).all()
+    return render_template('index.html', chats=reversed(history))
+
+
+@app.route('/chat', methods=['POST'])
+def chat_api():
+    user_input = request.json.get('message')
+    bot_reply = get_gemini_response(user_input)
+    is_booked = "SUCCESS TRANSACTION COMPLETE" in bot_reply
+
+    return jsonify({
+        "response": bot_reply,
+        "is_booked": is_booked
+    })
+
+
 def get_gemini_response(user_message):
     past_chats = ChatHistory.query.order_by(
         ChatHistory.id.desc()).limit(6).all()
@@ -149,7 +172,6 @@ def get_gemini_response(user_message):
         history=history_for_gemini,
         config=types.GenerateContentConfig(
             system_instruction=get_system_instruction(),
-            
             tools=[book_ticket],
             temperature=0.7,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
@@ -160,31 +182,11 @@ def get_gemini_response(user_message):
     response = chat_session.send_message(user_message)
     bot_reply = response.text
 
-    with app.app_context():
-        new_chat = ChatHistory(user=user_message, bot=bot_reply)
-        db.session.add(new_chat)
-        db.session.commit()
+    new_chat = ChatHistory(user=user_message, bot=bot_reply)
+    db.session.add(new_chat)
+    db.session.commit()
 
     return bot_reply
-
-
-@app.route('/', methods=['GET', 'POST'])
-def home():
-    if request.method == 'POST':
-        user_input = request.form.get('message')
-        if user_input:
-            get_gemini_response(user_input)
-            return redirect(url_for('home'))
-
-    history = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(5).all()
-    return render_template('index.html', chats=reversed(history))
-
-
-@app.route('/chat', methods=['POST'])
-def chat_api():
-    user_input = request.json.get('message')
-    bot_reply = get_gemini_response(user_input)
-    return jsonify({"response": bot_reply})
 
 
 @app.route('/clear_chat', methods=['POST'])
@@ -193,6 +195,14 @@ def clear_chat():
         db.session.query(ChatHistory).delete()
         db.session.commit()
     return redirect(url_for('home'))
+
+
+@app.route('/api_clear_chat', methods=['POST'])
+def api_clear_chat():
+    with app.app_context():
+        db.session.query(ChatHistory).delete()
+        db.session.commit()
+    return jsonify({'success': True})
 
 
 @app.route('/trains', methods=['POST'])
@@ -220,7 +230,7 @@ def get_trains():
     output = []
     for t in trains:
         output.append({"id": t.id, "name": t.name, "route": f"{t.start} -> {t.end}",
-                      "timing": f"{t.departure} - {t.arrival}", "seats": t.seats, "price": t.price})
+                       "timing": f"{t.departure} - {t.arrival}", "seats": t.seats, "price": t.price})
     return jsonify(output)
 
 
