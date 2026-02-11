@@ -7,6 +7,58 @@ input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") send();
 });
 
+document.addEventListener("DOMContentLoaded", () => {
+    const historicalBotMessages = document.querySelectorAll('.message.bot .bubble[data-raw-content]');
+    
+    historicalBotMessages.forEach(bubble => {
+        const rawContent = bubble.getAttribute('data-raw-content');
+        
+        bubble.innerHTML = marked.parse(rawContent);
+        
+        const ticketData = extractTicketData(rawContent);
+        if (ticketData) {
+            showTicketUI(ticketData);
+        }
+    });
+    
+    chatBox.scrollTop = chatBox.scrollHeight;
+});
+
+function extractTicketData(text) {
+    const pnrMatch = text.match(/PNR:\s*(\S+)/);
+    const passengerMatch = text.match(/PASSENGER:\s*(.+?)\s*\((\w+)\)/);
+    const mobileMatch = text.match(/MOBILE:\s*(\S+)/);
+    const trainMatch = text.match(/TRAIN:\s*(.+?)(?:\n|$)/);
+    const routeMatch = text.match(/ROUTE:\s*(.+?)(?:\n|$)/);
+    const timingMatch = text.match(/TIMING:\s*(.+?)(?:\n|$)/);
+    const seatsMatch = text.match(/SEATS:\s*(\d+)/);
+    const seatNumbersMatch = text.match(/SEAT NUMBERS:\s*(.+?)(?:\n|$)/);
+    const totalPriceMatch = text.match(/TOTAL PRICE:\s*(.+?)(?:\n|$)/);
+    
+    if (pnrMatch && passengerMatch && trainMatch) {
+        return {
+            pnr: pnrMatch[1],
+            passenger: {
+                name: passengerMatch[1],
+                gender: passengerMatch[2],
+                mobile: mobileMatch ? mobileMatch[1] : 'N/A'
+            },
+            train: {
+                name: trainMatch[1].trim(),
+                route: routeMatch ? routeMatch[1].trim() : 'N/A',
+                timing: timingMatch ? timingMatch[1].trim() : 'N/A'
+            },
+            booking: {
+                seats: seatsMatch ? parseInt(seatsMatch[1]) : 0,
+                seat_numbers: seatNumbersMatch ? seatNumbersMatch[1].split(',').map(s => s.trim()) : [],
+                total_price: totalPriceMatch ? totalPriceMatch[1].trim() : 'N/A'
+            }
+        };
+    }
+    
+    return null;
+}
+
 function addMessage(text, role) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
@@ -58,7 +110,6 @@ function showTicketUI(ticket) {
     
     const { pnr, passenger, train, booking } = ticket;
 
-
     const ticketDiv = document.createElement("div");
     ticketDiv.className = "ride-ticket";
 
@@ -99,7 +150,7 @@ function showTicketUI(ticket) {
             </div>
             <div class="t-row">
                 <span>Seat Numbers</span>
-                <b>${booking.seat_numbers.join(", ")}</b>
+                <b>${Array.isArray(booking.seat_numbers) ? booking.seat_numbers.join(", ") : booking.seat_numbers}</b>
             </div>
             <div class="t-price">
                 Total: ₹${booking.total_price}

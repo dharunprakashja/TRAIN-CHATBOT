@@ -31,7 +31,7 @@
                 <div class="bubble">{{ chat.user }}</div>
             </div>
             <div class="message bot">
-                <div class="bubble">{{ chat.bot|safe }}</div>
+                <div class="bubble" data-raw-content="{{ chat.bot }}">{{ chat.bot|safe }}</div>
             </div>
             {% endfor %}
         </div>
