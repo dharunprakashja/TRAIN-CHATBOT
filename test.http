@@ -1,16 +1,19 @@
 POST http://127.0.0.1:5000/trains
 Content-Type: application/json
 
-{
-    "name": "Lishmiya Express",
+
+  {
+    "name": "CBE Bangalore ",
     "start": "CBE",
-    "end": "Kanyakumari",
-    "departure": "09:00 PM",
-    "arrival": "09:00 AM",
-    "duration": "12h 00m",
-    "seats": 100,
-    "price": 300
-}
+    "end": "Bangalore",
+    "departure": "02:00 PM",
+    "arrival": "08:30 PM",
+    "duration": "06h 30m",
+    "seats": 95,
+    "price": 390
+  }
+
+
 
 ###
 

@@ -1,6 +1,5 @@
 import os
 import json
-import uuid
 import random
 from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_migrate import Migrate
@@ -131,27 +130,12 @@ After Booking Success
 When the `book_ticket` tool returns success, simply say:
 
 "Your booking is confirmed! Your e-ticket is displayed below."
-# TICKET FORMAT (STRICT):
-When a booking is successful, the output MUST look exactly like this, with every detail on a NEW LINE:
-
-SUCCESS TRANSACTION COMPLETE
-
-STATUS: Booking Confirmed
-PASSENGER: [Name] ([Gender])
-MOBILE: [Mobile Number]
-TRAIN: [Train Name]
-ROUTE: [Start] to [End]
-TIMING: [Departure] - [Arrival]
-SEATS: [Quantity]
-SEAT NUMBERS: [Seat List]
-TOTAL PRICE: [Price]
-PNR: [PNR Number]
 
 DO NOT display ticket details in text. The UI will automatically show a formatted ticket card.
 
 # EDGE CASE PROTOCOLS
 - Missing Routes: List all available routes in the system line-by-line if a search fails.
-- No Emojis in Tickets: Keep the final ticket block clean text only as defined below.
+- No Emojis in Tickets: Keep the final ticket block clean text only.
 
 """
 
@@ -164,7 +148,7 @@ def home():
             bot_reply, _ = get_gemini_response(user_input)
             return jsonify({'response': bot_reply})
         return jsonify({'error': 'No message provided'}), 400
-    history = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(5).all()
+    history = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(10).all()
     return render_template('index.html', chats=reversed(history))
 
 
@@ -243,9 +227,31 @@ def get_gemini_response(user_message):
     response = chat_session.send_message(user_message)
     bot_reply = response.text
 
-    new_chat = ChatHistory(user=user_message, bot=bot_reply)
+    ticket_json = None
+    if _last_booking_result and _last_booking_result.get("status") == "success":
+        ticket_json = json.dumps({
+            "pnr": _last_booking_result["pnr"],
+            "passenger": {
+                "name": _last_booking_result["passenger"]["name"],
+                "gender": _last_booking_result["passenger"]["gender"],
+                "mobile": _last_booking_result["passenger"]["mobile"],
+            },
+            "train": {
+                "name": _last_booking_result["train_details"]["name"],
+                "route": _last_booking_result["train_details"]["route"],
+                "timing": _last_booking_result["train_details"]["timing"],
+            },
+            "booking": {
+                "seats": _last_booking_result["booking_details"]["seats_count"],
+                "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
+                "total_price": _last_booking_result["booking_details"]["total_price"],
+            }
+        })
+
+    new_chat = ChatHistory(user=user_message, bot=bot_reply, booked_ticket=ticket_json)
     db.session.add(new_chat)
     db.session.commit()
+    
     return bot_reply, _last_booking_result
 
 

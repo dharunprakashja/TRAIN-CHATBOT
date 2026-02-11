@@ -30,14 +30,14 @@
             <div class="message user">
                 <div class="bubble">{{ chat.user }}</div>
             </div>
-            <div class="message bot">
-                <div class="bubble" data-raw-content="{{ chat.bot }}">{{ chat.bot|safe }}</div>
+            <div class="message bot" data-ticket='{{ chat.booked_ticket|safe }}'>
+                <div class="bubble">{{ chat.bot|safe }}</div>
             </div>
             {% endfor %}
         </div>
 
         <div class="input-area">
-            <input type="text" id="user-input" placeholder="Type your message..." required autocomplete="off" autofocus>
+            <input type="text" id="user-input" placeholder="Type your message......." required autocomplete="off" autofocus>
             <button id="send-btn">Send</button>
         </div>
     </div>

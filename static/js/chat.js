@@ -8,56 +8,29 @@ input.addEventListener("keydown", (e) => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
-    const historicalBotMessages = document.querySelectorAll('.message.bot .bubble[data-raw-content]');
+    const historicalBotMessages = document.querySelectorAll('.message.bot');
     
-    historicalBotMessages.forEach(bubble => {
-        const rawContent = bubble.getAttribute('data-raw-content');
+    historicalBotMessages.forEach(messageDiv => {
+        const bubble = messageDiv.querySelector('.bubble');
+        const ticketJson = messageDiv.getAttribute('data-ticket');
         
-        bubble.innerHTML = marked.parse(rawContent);
+        if (bubble) {
+            const rawContent = bubble.textContent;
+            bubble.innerHTML = marked.parse(rawContent);
+        }
         
-        const ticketData = extractTicketData(rawContent);
-        if (ticketData) {
-            showTicketUI(ticketData);
+        if (ticketJson && ticketJson !== 'None' && ticketJson !== 'null') {
+            try {
+                const ticketData = JSON.parse(ticketJson);
+                showTicketUI(ticketData);
+            } catch (e) {
+                console.error("Failed to parse ticket JSON:", e);
+            }
         }
     });
     
     chatBox.scrollTop = chatBox.scrollHeight;
 });
-
-function extractTicketData(text) {
-    const pnrMatch = text.match(/PNR:\s*(\S+)/);
-    const passengerMatch = text.match(/PASSENGER:\s*(.+?)\s*\((\w+)\)/);
-    const mobileMatch = text.match(/MOBILE:\s*(\S+)/);
-    const trainMatch = text.match(/TRAIN:\s*(.+?)(?:\n|$)/);
-    const routeMatch = text.match(/ROUTE:\s*(.+?)(?:\n|$)/);
-    const timingMatch = text.match(/TIMING:\s*(.+?)(?:\n|$)/);
-    const seatsMatch = text.match(/SEATS:\s*(\d+)/);
-    const seatNumbersMatch = text.match(/SEAT NUMBERS:\s*(.+?)(?:\n|$)/);
-    const totalPriceMatch = text.match(/TOTAL PRICE:\s*(.+?)(?:\n|$)/);
-    
-    if (pnrMatch && passengerMatch && trainMatch) {
-        return {
-            pnr: pnrMatch[1],
-            passenger: {
-                name: passengerMatch[1],
-                gender: passengerMatch[2],
-                mobile: mobileMatch ? mobileMatch[1] : 'N/A'
-            },
-            train: {
-                name: trainMatch[1].trim(),
-                route: routeMatch ? routeMatch[1].trim() : 'N/A',
-                timing: timingMatch ? timingMatch[1].trim() : 'N/A'
-            },
-            booking: {
-                seats: seatsMatch ? parseInt(seatsMatch[1]) : 0,
-                seat_numbers: seatNumbersMatch ? seatNumbersMatch[1].split(',').map(s => s.trim()) : [],
-                total_price: totalPriceMatch ? totalPriceMatch[1].trim() : 'N/A'
-            }
-        };
-    }
-    
-    return null;
-}
 
 function addMessage(text, role) {
     const div = document.createElement("div");
@@ -70,12 +43,38 @@ function addMessage(text, role) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+function showTypingIndicator() {
+    const div = document.createElement("div");
+    div.className = "message bot";
+    div.id = "typing-indicator-msg";
+
+    div.innerHTML = `
+        <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    `;
+
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return div;
+}
+
+function removeTypingIndicator() {
+    const indicator = document.getElementById("typing-indicator-msg");
+    if (indicator) indicator.remove();
+}
+
 async function send() {
     const text = input.value.trim();
     if (!text) return;
 
     addMessage(text, "user");
     input.value = "";
+    input.disabled = true;
+    sendBtn.disabled = true;
+    showTypingIndicator();
 
     try {
         const response = await fetch("/chat", {
@@ -86,6 +85,8 @@ async function send() {
 
         const data = await response.json();
         console.log("Full Response:", data);
+
+        removeTypingIndicator();
 
         if (data.response) {
             addMessage(data.response, "bot");
@@ -98,15 +99,17 @@ async function send() {
 
     } catch (err) {
         console.error("Error:", err);
-        addMessage("ASYNC NOT WORK", "bot");
+        removeTypingIndicator();
+        addMessage("Something went wrong. Please try again.", "bot");
+    } finally {
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
     }
 }
 
 function showTicketUI(ticket) {
     console.log("Creating ticket UI");
-    console.log("Passenger:", ticket.passenger);
-    console.log("Train:", ticket.train);
-    console.log("Booking:", ticket.booking);
     
     const { pnr, passenger, train, booking } = ticket;
 
@@ -115,7 +118,7 @@ function showTicketUI(ticket) {
 
     ticketDiv.innerHTML = `
         <div class="t-header">
-            <span>🚆 INDIAN RAILWAYS E-TICKET</span>
+            <span>🚅 PRAKASH RAILWAYS E-TICKET</span>
             <b style="color:#2ecc71">✅ CONFIRMED</b>
         </div>
 

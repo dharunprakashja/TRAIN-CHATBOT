@@ -86,7 +86,7 @@ body {
 
 .bubble h3 {
     margin: 5px 0;
-    color: #2980b9;
+    color: blue;
 }
 
 .bubble hr {
@@ -120,16 +120,15 @@ body {
     cursor: pointer;
 }
 
-/* ===== TICKET UI STYLES ===== */
 .ride-ticket {
     width: 100%;
     max-width: 500px;
     background: #fff;
-    border-radius: 12px;
+    border-radius: 15px;
     border-left: 5px solid #2ecc71;
     box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     margin: 15px 0;
-    overflow: visible; /* CRITICAL: Changed from hidden to visible */
+    overflow: visible;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     align-self: flex-start;
 }
@@ -147,7 +146,6 @@ body {
 
 .t-body {
     padding: 20px;
-    /* NO height restrictions */
 }
 
 .t-row {
@@ -182,4 +180,27 @@ body {
     font-size: 1.3rem;
     color: #2ecc71;
     text-align: right;
+}
+
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 14px;
+    background: #ffffff;
+    border-radius: 18px;
+    width: fit-content;
+}
+
+.typing-indicator  {
+    width: 5px;
+    height: 5px;
+    background: grey;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+#send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
