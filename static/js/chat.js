@@ -10,7 +10,10 @@ input.addEventListener("keydown", (e) => {
 function addMessage(text, role) {
     const div = document.createElement("div");
     div.className = `message ${role}`;
-    div.innerHTML = `<div class="bubble">${text}</div>`;
+    
+    const content = (role === "bot") ? marked.parse(text) : text;
+    
+    div.innerHTML = `<div class="bubble">${content}</div>`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
@@ -30,53 +33,82 @@ async function send() {
         });
 
         const data = await response.json();
+        console.log("Full Response:", data);
 
-        // 1. Always show the bot's text response
         if (data.response) {
             addMessage(data.response, "bot");
         }
 
-        // 2. If booking succeeded, render the structured ticket UI
-        //    (ticket JSON comes directly from book_ticket's return value — no manual typing)
         if (data.is_booked && data.ticket) {
+            console.log("Ticket data received:", data.ticket);
             showTicketUI(data.ticket);
         }
 
     } catch (err) {
-        console.error(err);
-        addMessage("⚠️ System offline. Please try again later.", "bot");
+        console.error("Error:", err);
+        addMessage("ASYNC NOT WORK", "bot");
     }
 }
 
 function showTicketUI(ticket) {
+    console.log("Creating ticket UI");
+    console.log("Passenger:", ticket.passenger);
+    console.log("Train:", ticket.train);
+    console.log("Booking:", ticket.booking);
+    
     const { pnr, passenger, train, booking } = ticket;
+
 
     const ticketDiv = document.createElement("div");
     ticketDiv.className = "ride-ticket";
 
     ticketDiv.innerHTML = `
         <div class="t-header">
-            <span>INDIAN RAILWAYS E-TICKET</span>
-            <b style="color:#2ecc71">CONFIRMED</b>
+            <span>🚆 INDIAN RAILWAYS E-TICKET</span>
+            <b style="color:#2ecc71">✅ CONFIRMED</b>
         </div>
 
         <div class="t-body">
-            <div class="t-row"><span>PNR</span><b>${pnr}</b></div>
-            <div class="t-row"><span>Passenger</span>
+            <div class="t-row">
+                <span>PNR</span>
+                <b>${pnr}</b>
+            </div>
+            <div class="t-row">
+                <span>Passenger</span>
                 <b>${passenger.name} (${passenger.gender})</b>
             </div>
-            <div class="t-row"><span>Mobile</span><b>${passenger.mobile}</b></div>
-            <div class="t-row"><span>Train</span><b>${train.name}</b></div>
-            <div class="t-row"><span>Route</span><b>${train.route}</b></div>
-            <div class="t-row"><span>Timing</span><b>${train.timing}</b></div>
-            <div class="t-row"><span>Seats</span><b>${booking.seats}</b></div>
-            <div class="t-row"><span>Seat Numbers</span>
+            <div class="t-row">
+                <span>Mobile</span>
+                <b>${passenger.mobile}</b>
+            </div>
+            <div class="t-row">
+                <span>Train</span>
+                <b>${train.name}</b>
+            </div>
+            <div class="t-row">
+                <span>Route</span>
+                <b>${train.route}</b>
+            </div>
+            <div class="t-row">
+                <span>Timing</span>
+                <b>${train.timing}</b>
+            </div>
+            <div class="t-row">
+                <span>Seats</span>
+                <b>${booking.seats}</b>
+            </div>
+            <div class="t-row">
+                <span>Seat Numbers</span>
                 <b>${booking.seat_numbers.join(", ")}</b>
             </div>
-            <div class="t-price">Total: ₹${booking.total_price}</div>
+            <div class="t-price">
+                Total: ₹${booking.total_price}
+            </div>
         </div>
     `;
 
     chatBox.appendChild(ticketDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
+    
+    console.log("Ticket UI added");
 }

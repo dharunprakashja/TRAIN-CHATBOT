@@ -2,14 +2,14 @@ POST http://127.0.0.1:5000/trains
 Content-Type: application/json
 
 {
-    "name": "Coimbatore Express",
+    "name": "Lishmiya Express",
     "start": "CBE",
-    "end": "Salem",
-    "departure": "06:50 PM",
-    "arrival": "10:20 AM",
-    "duration": "10h 30m",
-    "seats": 50,
-    "price": 1200
+    "end": "Kanyakumari",
+    "departure": "09:00 PM",
+    "arrival": "09:00 AM",
+    "duration": "12h 00m",
+    "seats": 100,
+    "price": 300
 }
 
 ###

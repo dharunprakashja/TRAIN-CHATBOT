@@ -1,10 +1,8 @@
 body {
     font-family: 'Segoe UI', sans-serif;
-
-    background-image: url("../image//bg.png");
+    background-image: url("../image/bg.png");
     background-size: cover;        
     background-position: center;   
-
     display: flex;
     justify-content: center;
     align-items: center;
@@ -12,9 +10,8 @@ body {
     margin: 0;
 }
 
-
 .container {
-    width: 450px;
+    width: 1000px;
     height: 650px;
     background: white;
     border-radius: 15px;
@@ -53,6 +50,11 @@ body {
     gap: 15px;
 }
 
+.message {
+    display: flex;
+    flex-direction: column;
+}
+
 .bubble {
     max-width: 85%;
     padding: 12px 16px;
@@ -61,11 +63,37 @@ body {
     line-height: 1.5;
 }
 
-.message.user { align-self: flex-end; }
-.user .bubble { background: #2c3e50; color: white; border-bottom-right-radius: 2px; }
+.message.user { 
+    align-self: flex-end; 
+}
 
-.message.bot { align-self: flex-start; }
-.bot .bubble { background: #ffffff; color: #333; border: 1px solid #ddd; border-bottom-left-radius: 2px; }
+.user .bubble { 
+    background: #2c3e50; 
+    color: white; 
+    border-bottom-right-radius: 2px; 
+}
+
+.message.bot { 
+    align-self: flex-start; 
+}
+
+.bot .bubble { 
+    background: #ffffff; 
+    color: #333; 
+    border: 1px solid #ddd; 
+    border-bottom-left-radius: 2px; 
+}
+
+.bubble h3 {
+    margin: 5px 0;
+    color: #2980b9;
+}
+
+.bubble hr {
+    border: 0;
+    border-top: 1px solid #eee;
+    margin: 10px 0;
+}
 
 .input-area {
     display: flex;
@@ -92,39 +120,66 @@ body {
     cursor: pointer;
 }
 
+/* ===== TICKET UI STYLES ===== */
 .ride-ticket {
-    margin-top: 10px;
-    border: 2px dashed #2c3e50;
-    border-radius: 10px;
+    width: 100%;
+    max-width: 500px;
     background: #fff;
-    animation: slideUp 0.4s ease-out;
+    border-radius: 12px;
+    border-left: 5px solid #2ecc71;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    margin: 15px 0;
+    overflow: visible; /* CRITICAL: Changed from hidden to visible */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    align-self: flex-start;
 }
 
 .t-header {
-    background: #2c3e50;
-    color: #fff;
-    padding: 8px 12px;
-    font-size: 0.8rem;
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    padding: 12px 15px;
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: white;
+    font-weight: 600;
 }
 
 .t-body {
-    padding: 12px;
-    font-size: 0.85rem;
+    padding: 20px;
+    /* NO height restrictions */
 }
 
 .t-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 5px;
+    padding: 10px 0;
     border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9rem;
+}
+
+.t-row:last-of-type {
+    border-bottom: none;
+}
+
+.t-row span {
+    color: #666;
+    font-weight: 500;
+    min-width: 120px;
+}
+
+.t-row b {
+    color: #2c3e50;
+    font-weight: 600;
+    text-align: right;
 }
 
 .t-price {
-    text-align: right;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid #2ecc71;
     font-weight: bold;
-    color: green;
-    font-size: 1.1rem;
-    margin-top: 5px;
+    font-size: 1.3rem;
+    color: #2ecc71;
+    text-align: right;
 }

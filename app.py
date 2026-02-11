@@ -24,7 +24,6 @@ db.init_app(app)
 migrate = Migrate(app, db)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Global store to capture the last book_ticket result
 _last_booking_result = None
 
 
@@ -38,7 +37,7 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
         train = db.session.get(Train, train_id)
 
         if not train:
-            result = json.dumps({"status": "error", "message": "Train ID not found."})
+            result = json.dumps({"status": "error", "message": "Train not found."})
             _last_booking_result = None
             return result
 
@@ -73,12 +72,11 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
             },
             "booking_details": {
                 "seats_count": quantity,
-                "seat_numbers": assigned_seats,   # list, not a joined string
+                "seat_numbers": assigned_seats,  
                 "total_price": total_cost
             }
         }
 
-        # Cache the structured booking result so chat_api can forward it to the frontend
         _last_booking_result = response_data
 
         return json.dumps(response_data)
@@ -97,7 +95,7 @@ def get_system_instruction():
 # ROLE & PERSONA
 You are RailBot, the official Digital Concierge. You are professional and proactive. 
 - Emoji Mandate: Use relevant emojis in conversation.
-- Privacy: NEVER show [DB_ID] to the user.
+- Privacy: NEVER show [DB_ID] to the user.  
 
 # LIVE TRAIN DATA
 {train_data}
@@ -107,15 +105,21 @@ You are RailBot, the official Digital Concierge. You are professional and proact
 
 2. Route Discovery: Ask for Start and End stations immediately upon travel intent.
 
-3. Train Listing (STRICT VERTICAL FORMAT): 
-   When listing matching trains, you MUST use this exact multi-line structure for EACH train:
-   
-   [Train Name]
-   Departure: [Departure Time]
-   Duration: [Duration]
-   
-   (Add a horizontal line or extra space between different train options). 
+3. Train Listing (STRICT MARKDOWN STRUCTURE & USE EMOJIS IN IT)
+For available trains, use this format:
+### [Train Name]
+---
+* **Route:** [Start Station] → [End Station]
+* **Departure:** [Time] | **Arrival:** [Time]
+* **Duration:** [Hours/Mins]
+* **Availability:** [Seats] Seats left
+* **Fare:** ₹[Price] per person
+---
 
+## 3. Booking Workflow
+1. **Collect Info**: Request Name, Gender, Mobile, and Number of Seats.
+2. **Tool Call**: Execute `book_ticket` only after gathering all info.
+3. **Validation**: Only confirm if the tool returns a "success" status.
 4. Data Collection: Collect Name, Gender, Mobile, and Seats. Skip info already known.
 
 5. Booking Execution:
@@ -123,10 +127,10 @@ You are RailBot, the official Digital Concierge. You are professional and proact
    - VERIFICATION: Only say "Booking Confirmed" if the tool returns "SUCCESS".
    - FORMATTING: Display the tool's output exactly as it is returned. Do not combine lines into paragraphs.
 
-# EDGE CASE PROTOCOLS
-- Missing Routes: List all available routes in the system line-by-line if a search fails.
-- No Emojis in Tickets: Keep the final ticket block clean text only as defined below.
+After Booking Success
+When the `book_ticket` tool returns success, simply say:
 
+"Your booking is confirmed! Your e-ticket is displayed below."
 # TICKET FORMAT (STRICT):
 When a booking is successful, the output MUST look exactly like this, with every detail on a NEW LINE:
 
@@ -142,6 +146,13 @@ SEATS: [Quantity]
 SEAT NUMBERS: [Seat List]
 TOTAL PRICE: [Price]
 PNR: [PNR Number]
+
+DO NOT display ticket details in text. The UI will automatically show a formatted ticket card.
+
+# EDGE CASE PROTOCOLS
+- Missing Routes: List all available routes in the system line-by-line if a search fails.
+- No Emojis in Tickets: Keep the final ticket block clean text only as defined below.
+
 """
 
 
@@ -160,12 +171,12 @@ def home():
 @app.route('/chat', methods=['POST'])
 def chat_api():
     global _last_booking_result
-    _last_booking_result = None  # Reset before each request
+    _last_booking_result = None 
 
     user_input = request.json.get('message')
     bot_reply, booking_data = get_gemini_response(user_input)
 
-    is_booked = booking_data is not None and booking_data.get("status") == "success"
+    is_booked = _last_booking_result is not None and _last_booking_result.get("status") == "success"
 
     payload = {
         "response": bot_reply,
@@ -173,24 +184,33 @@ def chat_api():
     }
 
     if is_booked:
+        print("=" * 50)
+        print("BOOKING DATA FROM _last_booking_result:")
+        print(json.dumps(_last_booking_result, indent=2))
+        print("=" * 50)
+        
         payload["ticket"] = {
-            "pnr": booking_data["pnr"],
+            "pnr": _last_booking_result["pnr"],
             "passenger": {
-                "name": booking_data["passenger"]["name"],
-                "gender": booking_data["passenger"]["gender"],
-                "mobile": booking_data["passenger"]["mobile"],
+                "name": _last_booking_result["passenger"]["name"],
+                "gender": _last_booking_result["passenger"]["gender"],
+                "mobile": _last_booking_result["passenger"]["mobile"],
             },
             "train": {
-                "name": booking_data["train_details"]["name"],
-                "route": booking_data["train_details"]["route"],
-                "timing": booking_data["train_details"]["timing"],
+                "name": _last_booking_result["train_details"]["name"],
+                "route": _last_booking_result["train_details"]["route"],
+                "timing": _last_booking_result["train_details"]["timing"],
             },
             "booking": {
-                "seats": booking_data["booking_details"]["seats_count"],
-                "seat_numbers": booking_data["booking_details"]["seat_numbers"],
-                "total_price": booking_data["booking_details"]["total_price"],
+                "seats": _last_booking_result["booking_details"]["seats_count"],
+                "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
+                "total_price": _last_booking_result["booking_details"]["total_price"],
             }
         }
+        
+        print("TICKET PAYLOAD BEING SENT:")
+        print(json.dumps(payload["ticket"], indent=2))
+        print("=" * 50)
 
     return jsonify(payload)
 

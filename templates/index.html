@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RailBot Classic</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
+
 <body>
 
     <div class="container">
@@ -20,11 +23,16 @@
 
         <div class="chat-window" id="chat-box">
             <div class="message bot">
-                <div class="bubble">Hello!!!!!!!! I am RailBot. Let me assist you to book train tickets. Where would you like to go?</div>
+                <div class="bubble">Hello!!!!!!!! I am RailBot. Let me assist you to book train tickets. Where would you
+                    like to go?</div>
             </div>
             {% for chat in chats %}
-            <div class="message user"><div class="bubble">{{ chat.user }}</div></div>
-            <div class="message bot"><div class="bubble">{{ chat.bot|safe }}</div></div>
+            <div class="message user">
+                <div class="bubble">{{ chat.user }}</div>
+            </div>
+            <div class="message bot">
+                <div class="bubble">{{ chat.bot|safe }}</div>
+            </div>
             {% endfor %}
         </div>
 
@@ -35,5 +43,7 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+
 </body>
+
 </html>
