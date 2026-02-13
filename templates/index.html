@@ -1,49 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RailBot Classic</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>RailBot</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-
 <body>
-
     <div class="container">
         <div class="header">
-            <span>RailBot</span>
-            <div style="float: right">
-                <form id="clear-form" action="{{ url_for('clear_chat') }}" method="POST">
-                    <button type="submit" class="clear-btn">Clear Chat</button>
-                </form>
-            </div>
+            <span>🚅 RailBot - Your Railway Assistant</span>
+            <button class="clear-btn" onclick="clearChat()">Clear Chat</button>
         </div>
-
-        <div class="chat-window" id="chat-box">
+        
+        <div class="chat-window">
             <div class="message bot">
-                <div class="bubble">Hello!!!!!!!! I am RailBot. Let me assist you to book train tickets. Where would you
-                    like to go?</div>
+                <div class="bubble">Hello!!!!!!!! I am RailBot. Let me assist you to book train tickets. Where would you like to go?</div>
             </div>
+            
             {% for chat in chats %}
             <div class="message user">
                 <div class="bubble">{{ chat.user }}</div>
             </div>
-            <div class="message bot" data-ticket='{{ chat.booked_ticket|safe }}'>
+            <div class="message bot" data-ticket="{{ chat.booked_ticket }}" data-trains="{{ chat.train_results }}">
                 <div class="bubble">{{ chat.bot|safe }}</div>
             </div>
             {% endfor %}
         </div>
-
+        
         <div class="input-area">
-            <input type="text" id="user-input" placeholder="Type your message......." required autocomplete="off" autofocus>
+            <input type="text" id="user-input" placeholder="Type your message..." autocomplete="off">
             <button id="send-btn">Send</button>
         </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
-
 </body>
-
 </html>

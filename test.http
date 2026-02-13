@@ -38,7 +38,7 @@ POST http://127.0.0.1:5000/chat
 Content-Type: application/json
 
 {
-    "message": "i want to go to cbe"
+    "message": "salem"
 }
 
 ###

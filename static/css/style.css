@@ -61,6 +61,8 @@ body {
     border-radius: 12px;
     font-size: 0.95rem;
     line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .message.user { 
@@ -75,6 +77,7 @@ body {
 
 .message.bot { 
     align-self: flex-start; 
+    max-width: 100%;
 }
 
 .bot .bubble { 
@@ -93,6 +96,10 @@ body {
     border: 0;
     border-top: 1px solid #eee;
     margin: 10px 0;
+}
+
+.bubble p {
+    margin: 5px 0;
 }
 
 .input-area {
@@ -192,15 +199,155 @@ body {
     width: fit-content;
 }
 
-.typing-indicator  {
-    width: 5px;
-    height: 5px;
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
     background: grey;
     border-radius: 50%;
     display: inline-block;
+    animation: typing 1.4s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typing {
+    0%, 60%, 100% {
+        transform: translateY(0);
+    }
+    30% {
+        transform: translateY(-10px);
+    }
 }
 
 #send-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Train Cards Styles */
+.train-carousel-container {
+    width: 100%;
+    max-width: 100%;
+    margin: 10px 0;
+    align-self: flex-start;
+}
+
+.train-carousel {
+    display: flex;
+    gap: 15px;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    padding: 10px 5px 10px 0;
+    scrollbar-width: thin;
+    scrollbar-color: #2c3e50 #f0f0f0;
+}
+
+.train-carousel::-webkit-scrollbar {
+    height: 8px;
+}
+
+.train-carousel::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 10px;
+}
+
+.train-carousel::-webkit-scrollbar-thumb {
+    background: #2c3e50;
+    border-radius: 10px;
+}
+
+.train-card {
+    min-width: 280px;
+    max-width: 280px;
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border: 2px solid #e0e0e0;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+
+.train-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(44, 62, 80, 0.2);
+    border-color: #2c3e50;
+}
+
+.train-card.selected {
+    border-color: #2ecc71;
+    background: #f0fff4;
+    box-shadow: 0 8px 20px rgba(46, 204, 113, 0.3);
+}
+
+.train-name {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 10px;
+}
+
+.train-detail {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    font-size: 14px;
+    color: #555;
+}
+
+.train-detail-label {
+    font-weight: 600;
+    color: #333;
+}
+
+.train-price {
+    font-size: 20px;
+    font-weight: bold;
+    color: #2ecc71;
+    margin-top: 10px;
+    text-align: right;
+}
+
+.train-seats {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
+.select-train-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px;
+    background: #2ecc71;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.3s;
+}
+
+.select-train-btn:hover {
+    background: #27ae60;
+}
+
+.train-card.selected .select-train-btn {
+    background: #2c3e50;
+}
+
+.select-train-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #95a5a6;
+}
+
+.train-card.selected .select-train-btn:disabled {
+    background: #2c3e50;
+    opacity: 0.7;
 }
