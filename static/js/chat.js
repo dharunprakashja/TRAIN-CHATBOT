@@ -7,19 +7,15 @@ document.addEventListener("DOMContentLoaded", function() {
     let selectedTrainName = null;
     let isBookingInProgress = false;
 
-    // Event listeners
     sendBtn.addEventListener("click", send);
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") send();
     });
 
-    // Load historical messages
     loadHistoricalMessages();
     
-    // Scroll to bottom
     chatBox.scrollTop = chatBox.scrollHeight;
 
-    // Functions
     function loadHistoricalMessages() {
         const historicalBotMessages = document.querySelectorAll('.message.bot');
         
@@ -120,25 +116,21 @@ document.addEventListener("DOMContentLoaded", function() {
             selectBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
                 
-                // Disable ALL buttons in ALL train cards
                 document.querySelectorAll('.select-train-btn').forEach(btn => {
                     btn.disabled = true;
                     btn.style.opacity = '0.5';
                     btn.style.cursor = 'not-allowed';
                 });
                 
-                // Remove selection styling from all cards
                 document.querySelectorAll('.train-card').forEach(c => {
                     c.classList.remove('selected');
                 });
                 
-                // Select this card
                 card.classList.add('selected');
                 selectBtn.textContent = 'Selected ✓';
                 selectedTrainId = train.train_id;
                 selectedTrainName = train.name;
                 
-                // Send selection to bot with train name
                 sendTrainSelection(train.name);
             });
             
@@ -157,14 +149,12 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     async function sendTrainSelection(trainName) {
-        // Add user message with train name (NO TRAIN ID)
         addMessage(trainName + " selected", "user");
         
         input.disabled = true;
         sendBtn.disabled = true;
         showTypingIndicator();
         
-        // Set booking in progress BEFORE the API call
         isBookingInProgress = true;
         
         try {
@@ -173,7 +163,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ 
                     message: `I selected ${trainName}`,
-                    train_id: selectedTrainId  // Send train_id to backend
+                    train_id: selectedTrainId 
                 })
             });
 
@@ -192,17 +182,14 @@ document.addEventListener("DOMContentLoaded", function() {
                     selectedTrainName = null;
                     isBookingInProgress = false;
                     
-                    // Remove all train carousels after successful booking
                     document.querySelectorAll('.train-carousel-container').forEach(tc => tc.remove());
                 }
-                // Keep isBookingInProgress = true if booking is not complete
             }
         } catch (err) {
             console.error("Error:", err);
             removeTypingIndicator();
             addMessage("Something went wrong. Please try again.", "bot");
             
-            // Re-enable buttons on error
             document.querySelectorAll('.select-train-btn').forEach(btn => {
                 btn.disabled = false;
                 btn.style.opacity = '1';
@@ -264,7 +251,6 @@ document.addEventListener("DOMContentLoaded", function() {
         try {
             const payload = { message: text };
             
-            // ALWAYS send train_id if it's set and booking is in progress
             if (selectedTrainId && isBookingInProgress) {
                 payload.train_id = selectedTrainId;
                 console.log("Sending train_id with message:", selectedTrainId);
@@ -299,7 +285,6 @@ document.addEventListener("DOMContentLoaded", function() {
                     selectedTrainName = null;
                     isBookingInProgress = false;
                     
-                    // Remove all train carousels after successful booking
                     document.querySelectorAll('.train-carousel-container').forEach(tc => tc.remove());
                 }
             }
@@ -314,7 +299,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // Make clearChat available globally
     window.clearChat = async function() {
         if (confirm("Are you sure you want to clear the chat history?")) {
             try {

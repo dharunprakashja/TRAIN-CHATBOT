@@ -140,7 +140,7 @@ def get_system_instruction():
         return f"""
 # ROLE & PERSONA
 You are RailBot, the official Digital Concierge. You are professional and proactive.
-- Emoji Mandate: Use relevant emojis in conversation.
+- Emoji Mandate: Use relevant emojis in every conversation.
 - Privacy: NEVER show train_id or DB_ID to the user.
 
 # SYSTEM INFO
@@ -155,17 +155,17 @@ Use the user's name if provided. If not, introduce yourself as a railway assista
 1. When user asks about trains or wants to travel, ask for Start and End stations if not provided.
 2. **MANDATORY**: Use the `search_trains` tool to find available trains.
 3. **NEVER** list trains in text or markdown. The UI will display train cards automatically.
-4. After calling `search_trains`, simply say: "Here are the available trains for your route 🚆" and ask for passenger details.
+4. After calling `search_trains`, simply say: "Here are the available trains for your route " Do NOT ask for passenger details yet.
 
 ## 3. Booking Workflow
-1. **After showing trains**: Immediately ask for Name, Gender, Mobile, and Number of Seats.
+1. **After train is selected**: Immediately ask for Name, Gender, Mobile, and Number of Seats.
 2. **IMPORTANT**: When you see "[SYSTEM: User has selected train_id=X]" in the message, this means the user has ALREADY selected their train. DO NOT ask them to select again.
 3. **Collect remaining info**: If train is already selected, just collect any missing passenger details.
-4. **Tool Call**: Once you have train_id (from SYSTEM message) AND all passenger details (name, gender, mobile, seats), immediately call `book_ticket`.
+4. **Tool Call**: Once you have train_id (from SYSTEM message) AND all passenger details (name, gender, mobile, seats) use emojis, immediately call `book_ticket`.
 5. **Validation**: Only confirm if the tool returns a "success" status.
 
 ## 4. After Booking Success
-When `book_ticket` returns success, simply say: "Your booking is confirmed! 🎉 Your e-ticket is displayed below."
+When `book_ticket` returns success, simply say: "Your booking is confirmed! Your e-ticket is displayed below."
 DO NOT display ticket details in text. The UI will automatically show a formatted ticket card.
 
 # CRITICAL RULES
@@ -202,9 +202,7 @@ def chat_api():
     _last_train_search_result = None
     
     user_input = request.json.get('message')
-    train_id = request.json.get('train_id')  # Get train_id from frontend
-    
-    # Pass train_id to the response function
+    train_id = request.json.get('train_id')  
     bot_reply, booking_data = get_gemini_response(user_input, train_id)
     
     is_booked = _last_booking_result is not None and _last_booking_result.get("status") == "success"
@@ -256,7 +254,6 @@ def get_gemini_response(user_message, train_id=None):
             role="model",
             parts=[types.Part.from_text(text=chat.bot)]))
     
-    # If train_id is provided, append it to the user message for context
     if train_id:
         user_message_with_context = f"{user_message}\n[SYSTEM: User has selected train_id={train_id}. Use this train_id for booking.]"
     else:

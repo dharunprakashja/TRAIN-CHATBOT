@@ -2,16 +2,20 @@ POST http://127.0.0.1:5000/trains
 Content-Type: application/json
 
 
-  {
-    "name": "CBE Bangalore ",
-    "start": "CBE",
-    "end": "Bangalore",
-    "departure": "02:00 PM",
-    "arrival": "08:30 PM",
-    "duration": "06h 30m",
-    "seats": 95,
-    "price": 390
-  }
+[
+{
+  "name": "Chennai Kovai Express",
+  "start": "Chennai",
+  "end": "CBE",
+  "departure": "07:45 PM",
+  "arrival": "04:15 AM",
+  "duration": "08h 30m",
+  "seats": 82,
+  "price": 540
+}
+
+]
+
 
 
 
