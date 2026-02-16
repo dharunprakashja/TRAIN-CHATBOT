@@ -1,7 +1,7 @@
 import os
 import json
 import random
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, Response, stream_with_context
 from flask_migrate import Migrate
 from google import genai
 from google.genai import types
@@ -182,67 +182,16 @@ DO NOT display ticket details in text. The UI will automatically show a formatte
 """
 
 
-@app.route('/', methods=['GET', 'POST'])
+
+@app.route('/', methods=['GET'])
 def home():
-    if request.method == 'POST':
-        user_input = request.form.get('message')
-        if user_input:
-            bot_reply, _ = get_gemini_response(user_input)
-            return jsonify({'response': bot_reply})
-        return jsonify({'error': 'No message provided'}), 400
-    
     history = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(10).all()
     return render_template('index.html', chats=reversed(history))
 
 
-@app.route('/chat', methods=['POST'])
-def chat_api():
-    global _last_booking_result, _last_train_search_result
-    _last_booking_result = None
-    _last_train_search_result = None
-    
-    user_input = request.json.get('message')
-    train_id = request.json.get('train_id')  
-    bot_reply, booking_data = get_gemini_response(user_input, train_id)
-    
-    is_booked = _last_booking_result is not None and _last_booking_result.get("status") == "success"
-    has_trains = _last_train_search_result is not None and _last_train_search_result.get("status") == "success"
-    
-    payload = {
-        "response": bot_reply,
-        "is_booked": is_booked,
-        "has_trains": has_trains
-    }
-    
-    if is_booked:
-        payload["ticket"] = {
-            "pnr": _last_booking_result["pnr"],
-            "passenger": {
-                "name": _last_booking_result["passenger"]["name"],
-                "gender": _last_booking_result["passenger"]["gender"],
-                "mobile": _last_booking_result["passenger"]["mobile"],
-            },
-            "train": {
-                "name": _last_booking_result["train_details"]["name"],
-                "route": _last_booking_result["train_details"]["route"],
-                "timing": _last_booking_result["train_details"]["timing"],
-            },
-            "booking": {
-                "seats": _last_booking_result["booking_details"]["seats_count"],
-                "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
-                "total_price": _last_booking_result["booking_details"]["total_price"],
-            }
-        }
-    
-    if has_trains:
-        payload["trains"] = _last_train_search_result["trains"]
-    
-    return jsonify(payload)
 
+def create_chat_session(user_message, train_id=None):
 
-def get_gemini_response(user_message, train_id=None):
-    global _last_booking_result, _last_train_search_result
-    
     past_chats = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(6).all()
     history_for_gemini = []
     
@@ -271,45 +220,93 @@ def get_gemini_response(user_message, train_id=None):
         )
     )
     
-    response = chat_session.send_message(user_message_with_context)
-    bot_reply = response.text
+    return chat_session, user_message_with_context
+
+
+@app.route('/chat/stream', methods=['POST'])
+def chat_stream():
+    global _last_booking_result, _last_train_search_result
+    _last_booking_result = None
+    _last_train_search_result = None
     
-    ticket_json = None
-    trains_json = None
+    user_input = request.json.get('message')
+    train_id = request.json.get('train_id')
     
-    if _last_booking_result and _last_booking_result.get("status") == "success":
-        ticket_json = json.dumps({
-            "pnr": _last_booking_result["pnr"],
-            "passenger": {
-                "name": _last_booking_result["passenger"]["name"],
-                "gender": _last_booking_result["passenger"]["gender"],
-                "mobile": _last_booking_result["passenger"]["mobile"],
-            },
-            "train": {
-                "name": _last_booking_result["train_details"]["name"],
-                "route": _last_booking_result["train_details"]["route"],
-                "timing": _last_booking_result["train_details"]["timing"],
-            },
-            "booking": {
-                "seats": _last_booking_result["booking_details"]["seats_count"],
-                "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
-                "total_price": _last_booking_result["booking_details"]["total_price"],
+    def generate():
+        chat_session, user_message_with_context = create_chat_session(user_input, train_id)
+        
+        full_response = ""
+        
+        for chunk in chat_session.send_message_stream(user_message_with_context):
+            if chunk.text:
+                full_response += chunk.text
+                yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
+        
+        is_booked = _last_booking_result is not None and _last_booking_result.get("status") == "success"
+        has_trains = _last_train_search_result is not None and _last_train_search_result.get("status") == "success"
+        
+        if is_booked:
+            ticket_data = {
+                "pnr": _last_booking_result["pnr"],
+                "passenger": {
+                    "name": _last_booking_result["passenger"]["name"],
+                    "gender": _last_booking_result["passenger"]["gender"],
+                    "mobile": _last_booking_result["passenger"]["mobile"],
+                },
+                "train": {
+                    "name": _last_booking_result["train_details"]["name"],
+                    "route": _last_booking_result["train_details"]["route"],
+                    "timing": _last_booking_result["train_details"]["timing"],
+                },
+                "booking": {
+                    "seats": _last_booking_result["booking_details"]["seats_count"],
+                    "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
+                    "total_price": _last_booking_result["booking_details"]["total_price"],
+                }
             }
-        })
+            yield f"data: {json.dumps({'type': 'ticket', 'content': ticket_data})}\n\n"
+        
+        if has_trains:
+            yield f"data: {json.dumps({'type': 'trains', 'content': _last_train_search_result['trains']})}\n\n"
+        
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+        ticket_json = None
+        trains_json = None
+        
+        if is_booked:
+            ticket_json = json.dumps({
+                "pnr": _last_booking_result["pnr"],
+                "passenger": {
+                    "name": _last_booking_result["passenger"]["name"],
+                    "gender": _last_booking_result["passenger"]["gender"],
+                    "mobile": _last_booking_result["passenger"]["mobile"],
+                },
+                "train": {
+                    "name": _last_booking_result["train_details"]["name"],
+                    "route": _last_booking_result["train_details"]["route"],
+                    "timing": _last_booking_result["train_details"]["timing"],
+                },
+                "booking": {
+                    "seats": _last_booking_result["booking_details"]["seats_count"],
+                    "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
+                    "total_price": _last_booking_result["booking_details"]["total_price"],
+                }
+            })
+        
+        if has_trains:
+            trains_json = json.dumps(_last_train_search_result["trains"])
+        
+        new_chat = ChatHistory(
+            user=user_input,
+            bot=full_response,
+            booked_ticket=ticket_json,
+            train_results=trains_json
+        )
+        db.session.add(new_chat)
+        db.session.commit()
     
-    if _last_train_search_result and _last_train_search_result.get("status") == "success":
-        trains_json = json.dumps(_last_train_search_result["trains"])
-    
-    new_chat = ChatHistory(
-        user=user_message,
-        bot=bot_reply,
-        booked_ticket=ticket_json,
-        train_results=trains_json
-    )
-    db.session.add(new_chat)
-    db.session.commit()
-    
-    return bot_reply, _last_booking_result
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
 @app.route('/clear_chat', methods=['POST'])

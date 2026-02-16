@@ -19,6 +19,14 @@ document.addEventListener("DOMContentLoaded", function() {
     function loadHistoricalMessages() {
         const historicalBotMessages = document.querySelectorAll('.message.bot');
         
+        let hasAnyBooking = false;
+        historicalBotMessages.forEach(messageDiv => {
+            const ticketJson = messageDiv.getAttribute('data-ticket');
+            if (ticketJson && ticketJson !== 'None' && ticketJson !== 'null') {
+                hasAnyBooking = true;
+            }
+        });
+        
         historicalBotMessages.forEach(messageDiv => {
             const bubble = messageDiv.querySelector('.bubble');
             const ticketJson = messageDiv.getAttribute('data-ticket');
@@ -41,7 +49,8 @@ document.addEventListener("DOMContentLoaded", function() {
             if (trainsJson && trainsJson !== 'None' && trainsJson !== 'null') {
                 try {
                     const trainsData = JSON.parse(trainsJson);
-                    showTrainCards(trainsData, messageDiv);
+                    // If ANY booking exists in history, disable all trains
+                    showTrainCards(trainsData, messageDiv, hasAnyBooking);
                 } catch (e) {
                     console.error("Failed to parse trains JSON:", e);
                 }
@@ -74,7 +83,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (indicator) indicator.remove();
     }
 
-    function showTrainCards(trains, parentDiv) {
+    function showTrainCards(trains, parentDiv, isBooked = false) {
         const container = document.createElement("div");
         container.className = "train-carousel-container";
         
@@ -113,26 +122,34 @@ document.addEventListener("DOMContentLoaded", function() {
             `;
             
             const selectBtn = card.querySelector('.select-train-btn');
-            selectBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                
-                document.querySelectorAll('.select-train-btn').forEach(btn => {
-                    btn.disabled = true;
-                    btn.style.opacity = '0.5';
-                    btn.style.cursor = 'not-allowed';
+            
+            if (isBooked) {
+                selectBtn.disabled = true;
+                selectBtn.textContent = 'Booking Complete';
+                selectBtn.style.opacity = '0.5';
+                selectBtn.style.cursor = 'not-allowed';
+            } else {
+                selectBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    
+                    document.querySelectorAll('.select-train-btn').forEach(btn => {
+                        btn.disabled = true;
+                        btn.style.opacity = '0.5';
+                        btn.style.cursor = 'not-allowed';
+                    });
+                    
+                    document.querySelectorAll('.train-card').forEach(c => {
+                        c.classList.remove('selected');
+                    });
+                    
+                    card.classList.add('selected');
+                    selectBtn.textContent = 'Selected ✓';
+                    selectedTrainId = train.train_id;
+                    selectedTrainName = train.name;
+                    
+                    sendTrainSelection(train.name);
                 });
-                
-                document.querySelectorAll('.train-card').forEach(c => {
-                    c.classList.remove('selected');
-                });
-                
-                card.classList.add('selected');
-                selectBtn.textContent = 'Selected ✓';
-                selectedTrainId = train.train_id;
-                selectedTrainName = train.name;
-                
-                sendTrainSelection(train.name);
-            });
+            }
             
             carousel.appendChild(card);
         });
@@ -153,55 +170,10 @@ document.addEventListener("DOMContentLoaded", function() {
         
         input.disabled = true;
         sendBtn.disabled = true;
-        showTypingIndicator();
         
         isBookingInProgress = true;
         
-        try {
-            const response = await fetch("/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    message: `I selected ${trainName}`,
-                    train_id: selectedTrainId 
-                })
-            });
-
-            const data = await response.json();
-            console.log("Train selection response:", data);
-
-            removeTypingIndicator();
-
-            if (data.response) {
-                const botMessageDiv = addMessage(data.response, "bot");
-                
-                if (data.is_booked && data.ticket) {
-                    console.log("Ticket data received:", data.ticket);
-                    showTicketUI(data.ticket, botMessageDiv);
-                    selectedTrainId = null;
-                    selectedTrainName = null;
-                    isBookingInProgress = false;
-                    
-                    document.querySelectorAll('.train-carousel-container').forEach(tc => tc.remove());
-                }
-            }
-        } catch (err) {
-            console.error("Error:", err);
-            removeTypingIndicator();
-            addMessage("Something went wrong. Please try again.", "bot");
-            
-            document.querySelectorAll('.select-train-btn').forEach(btn => {
-                btn.disabled = false;
-                btn.style.opacity = '1';
-                btn.style.cursor = 'pointer';
-            });
-            
-            isBookingInProgress = false;
-        } finally {
-            input.disabled = false;
-            sendBtn.disabled = false;
-            input.focus();
-        }
+        await sendMessageStream(`I selected ${trainName}`, selectedTrainId);
     }
 
     function showTicketUI(ticket, parentDiv) {
@@ -237,6 +209,109 @@ document.addEventListener("DOMContentLoaded", function() {
         chatBox.scrollTop = chatBox.scrollHeight;
     }
 
+    async function sendMessageStream(text, trainId = null) {
+        showTypingIndicator();
+
+        try {
+            const payload = { message: text };
+            
+            if (trainId) {
+                payload.train_id = trainId;
+            } else if (selectedTrainId && isBookingInProgress) {
+                payload.train_id = selectedTrainId;
+            }
+
+            const response = await fetch("/chat/stream", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            removeTypingIndicator();
+
+            const botMessageDiv = document.createElement("div");
+            botMessageDiv.className = "message bot";
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            botMessageDiv.appendChild(bubble);
+            chatBox.appendChild(botMessageDiv);
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullText = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); 
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const jsonStr = line.slice(6);
+                        
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            
+                            if (data.type === 'text') {
+                                fullText += data.content;
+                                bubble.innerHTML = marked.parse(fullText);
+                                chatBox.scrollTop = chatBox.scrollHeight;
+                            } else if (data.type === 'trains') {
+                                console.log("Trains data received:", data.content);
+                                showTrainCards(data.content, botMessageDiv);
+                                selectedTrainId = null;
+                                selectedTrainName = null;
+                                isBookingInProgress = false;
+                            } else if (data.type === 'ticket') {
+                                console.log("Ticket data received:", data.content);
+                                showTicketUI(data.content, botMessageDiv);
+                                selectedTrainId = null;
+                                selectedTrainName = null;
+                                isBookingInProgress = false;
+                                
+                                document.querySelectorAll('.select-train-btn').forEach(btn => {
+                                    btn.disabled = true;
+                                    btn.textContent = 'Booking Complete';
+                                    btn.style.opacity = '0.5';
+                                });
+                            } else if (data.type === 'done') {
+                                console.log("Streaming complete");
+                            }
+                        } catch (e) {
+                            console.error("Error parsing SSE data:", e);
+                        }
+                    }
+                }
+            }
+
+        } catch (err) {
+            console.error("Error:", err);
+            removeTypingIndicator();
+            addMessage("Something went wrong. Please try again.", "bot");
+            
+            document.querySelectorAll('.select-train-btn').forEach(btn => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            });
+            
+            isBookingInProgress = false;
+        } finally {
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    }
+
     async function send() {
         const text = input.value.trim();
         if (!text) return;
@@ -246,57 +321,7 @@ document.addEventListener("DOMContentLoaded", function() {
         input.disabled = true;
         sendBtn.disabled = true;
 
-        showTypingIndicator();
-
-        try {
-            const payload = { message: text };
-            
-            if (selectedTrainId && isBookingInProgress) {
-                payload.train_id = selectedTrainId;
-                console.log("Sending train_id with message:", selectedTrainId);
-            }
-
-            const response = await fetch("/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-
-            const data = await response.json();
-            console.log("Full Response:", data);
-
-            removeTypingIndicator();
-
-            if (data.response) {
-                const botMessageDiv = addMessage(data.response, "bot");
-                
-                if (data.has_trains && data.trains) {
-                    console.log("Trains data received:", data.trains);
-                    showTrainCards(data.trains, botMessageDiv);
-                    selectedTrainId = null;
-                    selectedTrainName = null;
-                    isBookingInProgress = false;
-                }
-                
-                if (data.is_booked && data.ticket) {
-                    console.log("Ticket data received:", data.ticket);
-                    showTicketUI(data.ticket, botMessageDiv);
-                    selectedTrainId = null;
-                    selectedTrainName = null;
-                    isBookingInProgress = false;
-                    
-                    document.querySelectorAll('.train-carousel-container').forEach(tc => tc.remove());
-                }
-            }
-        } catch (err) {
-            console.error("Error:", err);
-            removeTypingIndicator();
-            addMessage("Something went wrong. Please try again.", "bot");
-        } finally {
-            input.disabled = false;
-            sendBtn.disabled = false;
-            input.focus();
-        }
+        await sendMessageStream(text);
     }
 
     window.clearChat = async function() {
