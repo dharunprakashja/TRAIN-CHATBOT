@@ -1,21 +1,16 @@
 body {
     font-family: 'Segoe UI', sans-serif;
-    background-image: url("../image/bg.png");
-    background-size: cover;        
-    background-position: center;   
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
+    background: #f0f2f5;
     margin: 0;
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .container {
-    width: 1000px;
-    height: 650px;
+    width: 100vw;
+    height: 100vh;
     background: white;
-    border-radius: 15px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -35,9 +30,16 @@ body {
     background-color: #dc3545;
     color: white;
     border: none;
-    padding: 5px 10px;
+    padding: 8px 16px;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.clear-btn:hover {
+    background-color: #c82333;
 }
 
 .chat-window {
@@ -56,7 +58,7 @@ body {
 }
 
 .bubble {
-    max-width: 85%;
+    max-width: 70%;
     padding: 12px 16px;
     border-radius: 12px;
     font-size: 0.95rem;
@@ -104,32 +106,51 @@ body {
 
 .input-area {
     display: flex;
-    padding: 15px;
+    padding: 15px 20px;
     background: white;
-    border-top: 1px solid #eee;
+    border-top: 1px solid #ddd;
+    gap: 10px;
 }
 
 #user-input {
     flex: 1;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
+    padding: 12px 16px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
     outline: none;
+    font-size: 15px;
+    transition: border-color 0.3s;
+}
+
+#user-input:focus {
+    border-color: #2c3e50;
 }
 
 #send-btn {
-    margin-left: 10px;
-    padding: 10px 20px;
-    background: green;
+    padding: 12px 24px;
+    background: #2ecc71;
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    transition: background 0.3s;
+}
+
+#send-btn:hover {
+    background: #27ae60;
+}
+
+#send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #95a5a6;
 }
 
 .ride-ticket {
     width: 100%;
-    max-width: 500px;
+    max-width: 600px;
     background: #fff;
     border-radius: 15px;
     border-left: 5px solid #2ecc71;
@@ -142,7 +163,7 @@ body {
 
 .t-header {
     background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-    border-radius: 10px 10px 0 0 ;
+    border-radius: 10px 10px 0 0;
     padding: 12px 15px;
     display: flex;
     justify-content: space-between;
@@ -206,7 +227,7 @@ body {
     background: grey;
     border-radius: 50%;
     display: inline-block;
-    /* animation: typing 1.4s infinite; */
+    animation: typing 1.4s infinite;
 }
 
 .typing-indicator span:nth-child(2) {
@@ -224,11 +245,6 @@ body {
     30% {
         transform: translateY(-10px);
     }
-}
-
-#send-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 
 /* Train Cards Styles */
@@ -264,8 +280,8 @@ body {
 }
 
 .train-card {
-    min-width: 280px;
-    max-width: 280px;
+    min-width: 300px;
+    max-width: 300px;
     background: white;
     border-radius: 12px;
     padding: 16px;

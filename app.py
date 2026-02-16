@@ -140,7 +140,6 @@ def get_system_instruction():
         return f"""
 # ROLE & PERSONA
 You are RailBot, the official Digital Concierge. You are professional and proactive.
-- Emoji Mandate: Use relevant emojis in every conversation.
 - Privacy: NEVER show train_id or DB_ID to the user.
 
 # SYSTEM INFO
@@ -161,7 +160,7 @@ Use the user's name if provided. If not, introduce yourself as a railway assista
 1. **After train is selected**: Immediately ask for Name, Gender, Mobile, and Number of Seats.
 2. **IMPORTANT**: When you see "[SYSTEM: User has selected train_id=X]" in the message, this means the user has ALREADY selected their train. DO NOT ask them to select again.
 3. **Collect remaining info**: If train is already selected, just collect any missing passenger details.
-4. **Tool Call**: Once you have train_id (from SYSTEM message) AND all passenger details (name, gender, mobile, seats) use emojis, immediately call `book_ticket`.
+4. **Tool Call**: Once you have train_id (from SYSTEM message) AND all passenger details (name, gender, mobile, seats) use  immediately call `book_ticket`.
 5. **Validation**: Only confirm if the tool returns a "success" status.
 
 ## 4. After Booking Success
@@ -176,11 +175,9 @@ DO NOT display ticket details in text. The UI will automatically show a formatte
 
 # CONVERSATION STYLE
 - Be warm, helpful, and concise
-- Use more emojis 
 - Keep responses conversational, not robotic
 - Don't repeat yourself
 """
-
 
 
 @app.route('/', methods=['GET'])
@@ -191,7 +188,10 @@ def home():
 
 
 def create_chat_session(user_message, train_id=None):
-
+    """
+    Creates a Gemini chat session with conversation history and context.
+    Returns: (chat_session, user_message_with_context)
+    """
     past_chats = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(6).all()
     history_for_gemini = []
     
@@ -208,15 +208,68 @@ def create_chat_session(user_message, train_id=None):
     else:
         user_message_with_context = user_message
     
+    search_trains_declaration = types.FunctionDeclaration(
+        name="search_trains",
+        description="Searches for trains between two stations and returns a JSON array of train details.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "start_station": {
+                    "type": "string",
+                    "description": "The starting station name"
+                },
+                "end_station": {
+                    "type": "string",
+                    "description": "The destination station name"
+                }
+            },
+            "required": ["start_station", "end_station"]
+        }
+    )
+    
+    book_ticket_declaration = types.FunctionDeclaration(
+        name="book_ticket",
+        description="Books train tickets and returns a JSON object with booking confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "train_id": {
+                    "type": "integer",
+                    "description": "The ID of the train to book"
+                },
+                "quantity": {
+                    "type": "integer",
+                    "description": "Number of seats to book"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Passenger name"
+                },
+                "mobile": {
+                    "type": "string",
+                    "description": "Passenger mobile number"
+                },
+                "gender": {
+                    "type": "string",
+                    "description": "Passenger gender (M/F/Other)"
+                }
+            },
+            "required": ["train_id", "quantity", "name", "mobile", "gender"]
+        }
+    )
+    
+    railway_tool = types.Tool(
+        function_declarations=[search_trains_declaration, book_ticket_declaration]
+    )
+    
     chat_session = client.chats.create(
-        model="gemini-2.5-flash",
+        model="gemini-3-flash-preview",
+
         history=history_for_gemini,
         config=types.GenerateContentConfig(
             system_instruction=get_system_instruction(),
-            tools=[search_trains, book_ticket],
-            temperature=0.7,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                disable=False)
+            tools=[railway_tool],
+            temperature=0.7
         )
     )
     
@@ -225,6 +278,7 @@ def create_chat_session(user_message, train_id=None):
 
 @app.route('/chat/stream', methods=['POST'])
 def chat_stream():
+    """Streaming endpoint for real-time responses"""
     global _last_booking_result, _last_train_search_result
     _last_booking_result = None
     _last_train_search_result = None
@@ -238,7 +292,47 @@ def chat_stream():
         full_response = ""
         
         for chunk in chat_session.send_message_stream(user_message_with_context):
-            if chunk.text:
+            if chunk.candidates and chunk.candidates[0].content.parts:
+                for part in chunk.candidates[0].content.parts:
+                    if hasattr(part, 'function_call') and part.function_call:
+                        func_call = part.function_call
+                        
+                        if func_call.name == "search_trains":
+                            result = search_trains(
+                                func_call.args.get("start_station"),
+                                func_call.args.get("end_station")
+                            )
+                            function_response_part = types.Part.from_function_response(
+                                name="search_trains",
+                                response={"result": result}
+                            )
+                            for response_chunk in chat_session.send_message_stream(function_response_part):
+                                if response_chunk.text:
+                                    full_response += response_chunk.text
+                                    yield f"data: {json.dumps({'type': 'text', 'content': response_chunk.text})}\n\n"
+                                    
+                        elif func_call.name == "book_ticket":
+                            result = book_ticket(
+                                func_call.args.get("train_id"),
+                                func_call.args.get("quantity"),
+                                func_call.args.get("name"),
+                                func_call.args.get("mobile"),
+                                func_call.args.get("gender")
+                            )
+                            function_response_part = types.Part.from_function_response(
+                                name="book_ticket",
+                                response={"result": result}
+                            )
+                            for response_chunk in chat_session.send_message_stream(function_response_part):
+                                if response_chunk.text:
+                                    full_response += response_chunk.text
+                                    yield f"data: {json.dumps({'type': 'text', 'content': response_chunk.text})}\n\n"
+                    
+                    elif hasattr(part, 'text') and part.text:
+                        full_response += part.text
+                        yield f"data: {json.dumps({'type': 'text', 'content': part.text})}\n\n"
+            
+            elif chunk.text:
                 full_response += chunk.text
                 yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
         
@@ -293,6 +387,13 @@ def chat_stream():
                     "total_price": _last_booking_result["booking_details"]["total_price"],
                 }
             })
+            
+
+            previous_train_chat = ChatHistory.query.filter(
+                ChatHistory.train_results.isnot(None),
+                ChatHistory.booked_ticket.is_(None)
+            ).order_by(ChatHistory.id.desc()).first()
+            
         
         if has_trains:
             trains_json = json.dumps(_last_train_search_result["trains"])

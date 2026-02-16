@@ -49,7 +49,6 @@ document.addEventListener("DOMContentLoaded", function() {
             if (trainsJson && trainsJson !== 'None' && trainsJson !== 'null') {
                 try {
                     const trainsData = JSON.parse(trainsJson);
-                    // If ANY booking exists in history, disable all trains
                     showTrainCards(trainsData, messageDiv, hasAnyBooking);
                 } catch (e) {
                     console.error("Failed to parse trains JSON:", e);
