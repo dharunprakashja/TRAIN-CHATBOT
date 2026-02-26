@@ -43,9 +43,6 @@ collection = chroma_client.get_or_create_collection(name="railway_guidelines")
 print("ChromaDB collection count:", collection.count())
 
 
-
-
-
 def pdf_to_chroma(pdf_path: str):
     """Load PDF into ChromaDB using Gemini embeddings with overlap chunking."""
     print(f"Reading PDF: {pdf_path}")
@@ -123,7 +120,6 @@ with app.app_context():
         print("ChromaDB already has data, skipping PDF load.")
 
 
-
 def search_trains(start_station: str, end_station: str):
     """
     Searches for trains between two stations and returns a JSON array of train details.
@@ -178,12 +174,14 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
         train = db.session.get(Train, train_id)
 
         if not train:
-            result = json.dumps({"status": "error", "message": "Train not found."})
+            result = json.dumps(
+                {"status": "error", "message": "Train not found."})
             _last_booking_result = None
             return result
 
         if train.seats < quantity:
-            result = json.dumps({"status": "error", "message": f"Only {train.seats} seats remaining."})
+            result = json.dumps(
+                {"status": "error", "message": f"Only {train.seats} seats remaining."})
             _last_booking_result = None
             return result
 
@@ -287,11 +285,8 @@ def home():
 
 
 def create_chat_session(user_message, train_id=None):
-    """
-    Creates a Gemini chat session with conversation history and context.
-    Returns: (chat_session, user_message_with_context)
-    """
-    past_chats = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(6).all()
+    past_chats = ChatHistory.query.order_by(
+        ChatHistory.id.desc()).limit(6).all()
     history_for_gemini = []
 
     for chat in reversed(past_chats):
@@ -362,7 +357,7 @@ def create_chat_session(user_message, train_id=None):
         description=(
             "Search the official railway policy PDF for rules, guidelines, and information. "
             "Call this whenever the user asks about: cancellations, refunds, luggage/baggage rules, "
-            "train delays, compensation, concessions (senior/disabled/child), complaints, helpline, "
+            "train delays, compensation, concessions , complaints, helpline, "
             "tatkal booking, waitlisted tickets, seat reservations, berth types, fare rules, "
             "or ANY other railway policy or regulation topic."
         ),
@@ -379,7 +374,8 @@ def create_chat_session(user_message, train_id=None):
     )
 
     railway_tool = types.Tool(
-        function_declarations=[search_trains_declaration, book_ticket_declaration, retrieve_guidelines_declaration]
+        function_declarations=[search_trains_declaration,
+                               book_ticket_declaration, retrieve_guidelines_declaration]
     )
 
     chat_session = client.chats.create(
@@ -405,7 +401,8 @@ def chat_stream():
     train_id = request.json.get('train_id')
 
     def generate():
-        chat_session, user_message_with_context = create_chat_session(user_input, train_id)
+        chat_session, user_message_with_context = create_chat_session(
+            user_input, train_id)
 
         full_response = ""
 
@@ -414,7 +411,8 @@ def chat_stream():
             args = func_call.args or {}
 
             if name == "search_trains":
-                result = search_trains(args.get("start_station"), args.get("end_station"))
+                result = search_trains(
+                    args.get("start_station"), args.get("end_station"))
                 return types.Part.from_function_response(name=name, response={"result": result})
 
             elif name == "book_ticket":
@@ -427,87 +425,114 @@ def chat_stream():
             elif name == "retrieve_guidelines":
                 context = retrieve_guidelines(args.get("query", ""))
                 return types.Part.from_function_response(name=name, response={"context": context})
-            
+
         def handle_stream(stream):
             nonlocal full_response
-            collected_text = []
+
             collected_func_calls = []
 
             for chunk in stream:
-                if chunk.candidates and chunk.candidates[0].content.parts:
-                    for part in chunk.candidates[0].content.parts:
-                        if hasattr(part, 'function_call') and part.function_call:
-                            collected_func_calls.append(part.function_call)
-                        elif hasattr(part, 'text') and part.text:
-                            collected_text.append(part.text)
-                elif chunk.text:
-                    collected_text.append(chunk.text)
+                parts = []
 
+                if chunk.candidates and chunk.candidates[0].content.parts:
+                    parts = chunk.candidates[0].content.parts
+
+                for part in parts:
+                    if hasattr(part, 'text') and part.text:
+                        full_response += part.text
+                        yield f"data: {json.dumps({'type': 'text', 'content': part.text})}\n\n"
+
+                    elif hasattr(part, 'function_call') and part.function_call:
+                        collected_func_calls.append(part.function_call)
+
+                if not parts and chunk.text:
+                    full_response += chunk.text
+                    yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
+ 
             if collected_func_calls:
-                response_parts = [execute_tool(fc) for fc in collected_func_calls]
+                seen = {}
+                for fc in collected_func_calls:
+                    seen[fc.name] = fc
+                collected_func_calls = list(seen.values())
+                for fc in collected_func_calls:
+                    if fc.name == "search_trains":
+                        msg = "Searching trains"
+                    elif fc.name == "book_ticket":
+                        msg = "Booking ticket"
+                    elif fc.name == "retrieve_guidelines":
+                        msg = "Searching guidelines"
+                    else:
+                        msg = "Bot typing..."
+                    yield f"data: {json.dumps({'type': 'text', 'content': msg + '\n\n'})}\n\n"
+
+                response_parts = [execute_tool(fc)
+                                  for fc in collected_func_calls]
+
                 followup_stream = chat_session.send_message_stream(
-                    response_parts if len(response_parts) > 1 else response_parts[0]
+                    response_parts if len(
+                        response_parts) > 1 else response_parts[0]
                 )
+
                 yield from handle_stream(followup_stream)
 
-            else:
-                for text in collected_text:
-                    full_response += text
-                    yield f"data: {json.dumps({'type': 'text', 'content': text})}\n\n"
-    
-        yield from handle_stream(chat_session.send_message_stream(user_message_with_context))
+                is_booked = _last_booking_result is not None and _last_booking_result.get(
+                    "status") == "success"
+                has_trains = _last_train_search_result is not None and _last_train_search_result.get(
+                    "status") == "success"
 
-        is_booked = _last_booking_result is not None and _last_booking_result.get("status") == "success"
-        has_trains = _last_train_search_result is not None and _last_train_search_result.get("status") == "success"
+                if is_booked:
+                    ticket_data = {
+                        "pnr": _last_booking_result["pnr"],
+                        "passenger": {
+                            "name": _last_booking_result["passenger"]["name"],
+                            "gender": _last_booking_result["passenger"]["gender"],
+                            "mobile": _last_booking_result["passenger"]["mobile"],
+                        },
+                        "train": {
+                            "name": _last_booking_result["train_details"]["name"],
+                            "route": _last_booking_result["train_details"]["route"],
+                            "timing": _last_booking_result["train_details"]["timing"],
+                        },
+                        "booking": {
+                            "seats": _last_booking_result["booking_details"]["seats_count"],
+                            "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
+                            "total_price": _last_booking_result["booking_details"]["total_price"],
+                        }
+                    }
+                    yield f"data: {json.dumps({'type': 'ticket', 'content': ticket_data})}\n\n"
 
-        if is_booked:
-            ticket_data = {
-                "pnr": _last_booking_result["pnr"],
-                "passenger": {
-                    "name": _last_booking_result["passenger"]["name"],
-                    "gender": _last_booking_result["passenger"]["gender"],
-                    "mobile": _last_booking_result["passenger"]["mobile"],
-                },
-                "train": {
-                    "name": _last_booking_result["train_details"]["name"],
-                    "route": _last_booking_result["train_details"]["route"],
-                    "timing": _last_booking_result["train_details"]["timing"],
-                },
-                "booking": {
-                    "seats": _last_booking_result["booking_details"]["seats_count"],
-                    "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
-                    "total_price": _last_booking_result["booking_details"]["total_price"],
-                }
-            }
-            yield f"data: {json.dumps({'type': 'ticket', 'content': ticket_data})}\n\n"
+                if has_trains:
+                    yield f"data: {json.dumps({'type': 'trains', 'content': _last_train_search_result['trains']})}\n\n"
 
-        if has_trains:
-            yield f"data: {json.dumps({'type': 'trains', 'content': _last_train_search_result['trains']})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                ticket_json = None
+                trains_json = None
 
-        ticket_json = None
-        trains_json = None
+                if is_booked:
+                    ticket_json = json.dumps({
+                        "pnr": _last_booking_result["pnr"],
+                        "passenger": _last_booking_result["passenger"],
+                        "train": _last_booking_result["train_details"],
+                        "booking": _last_booking_result["booking_details"]
+                    })
 
-        if is_booked:
-            ticket_json = json.dumps({
-                "pnr": _last_booking_result["pnr"],
-                "passenger": _last_booking_result["passenger"],
-                "train": _last_booking_result["train_details"],
-                "booking": _last_booking_result["booking_details"]
-            })
+                if has_trains:
+                    trains_json = json.dumps(
+                        _last_train_search_result["trains"])
 
-        if has_trains:
-            trains_json = json.dumps(_last_train_search_result["trains"])
+                new_chat = ChatHistory(
+                    user=user_input,
+                    bot=full_response,
+                    booked_ticket=ticket_json,
+                    train_results=trains_json
+                )
+                db.session.add(new_chat)
+                db.session.commit()
 
-        new_chat = ChatHistory(
-            user=user_input,
-            bot=full_response,
-            booked_ticket=ticket_json,
-            train_results=trains_json
-        )
-        db.session.add(new_chat)
-        db.session.commit()
+        initial_stream = chat_session.send_message_stream(
+            user_message_with_context)
+        yield from handle_stream(initial_stream)
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
@@ -531,7 +556,8 @@ def api_clear_chat():
 @app.route('/trains', methods=['POST'])
 def add_train():
     data = request.json
-    required_fields = ['name', 'start', 'end', 'departure', 'arrival', 'duration', 'seats', 'price']
+    required_fields = ['name', 'start', 'end', 'departure',
+                       'arrival', 'duration', 'seats', 'price']
 
     for field in required_fields:
         if field not in data:
