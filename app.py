@@ -8,6 +8,10 @@ from google.genai import types
 from dotenv import load_dotenv
 from models import db, Train, ChatHistory
 
+import PyPDF2
+import chromadb
+from chromadb.config import Settings
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -28,19 +32,110 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 _last_booking_result = None
 _last_train_search_result = None
 
+CHROMA_PATH = "./chroma_db"
+
+chroma_client = chromadb.PersistentClient(
+    path=CHROMA_PATH,
+    settings=Settings(anonymized_telemetry=False)
+)
+
+collection = chroma_client.get_or_create_collection(name="railway_guidelines")
+print("ChromaDB collection count:", collection.count())
+
+
+
+
+
+def pdf_to_chroma(pdf_path: str):
+    """Load PDF into ChromaDB using Gemini embeddings with overlap chunking."""
+    print(f"Reading PDF: {pdf_path}")
+
+    with open(pdf_path, 'rb') as f:
+        pdf_reader = PyPDF2.PdfReader(f)
+        page_texts = [page.extract_text() or "" for page in pdf_reader.pages]
+        full_text = " ".join(page_texts)
+
+    chunk_size = 500
+    overlap = 100
+    chunks = []
+    metadatas = []
+    ids = []
+
+    for i in range(0, len(full_text), chunk_size - overlap):
+        chunk = full_text[i:i + chunk_size].strip()
+        if chunk:
+            chunks.append(chunk)
+            metadatas.append({"source": pdf_path, "chunk_index": i})
+            ids.append(f"chunk_{i}")
+
+    print(f"Generating Gemini embeddings for {len(chunks)} chunks...")
+
+    embeddings = []
+    for chunk in chunks:
+        response = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=chunk
+        )
+        embeddings.append(response.embeddings[0].values)
+
+    print("Storing in ChromaDB...")
+    collection.upsert(
+        documents=chunks,
+        embeddings=embeddings,
+        metadatas=metadatas,
+        ids=ids
+    )
+    print(f"Loaded {len(chunks)} chunks into ChromaDB with Gemini embeddings.")
+
+
+def retrieve_guidelines(query: str, n_results: int = 3) -> str:
+    """
+    Retrieve relevant railway policy/guideline chunks using Gemini embeddings.
+    Called by the model as a tool when it decides a policy question needs answering.
+    """
+    if collection.count() == 0:
+        return "No guidelines available."
+
+    response = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=query
+    )
+    query_embedding = response.embeddings[0].values
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=n_results
+    )
+
+    docs = results.get("documents", [[]])[0]
+    context = "\n\n".join(docs) if docs else ""
+    print(f"[RAG Tool] Retrieved {len(context)} chars for query: '{query}'")
+    return context if context else "No relevant guidelines found for this query."
+
+
+with app.app_context():
+    if collection.count() == 0:
+        if os.path.exists("railway_guidelines.pdf"):
+            pdf_to_chroma("railway_guidelines.pdf")
+        else:
+            print("Warning: railway_guidelines.pdf not found. RAG disabled.")
+    else:
+        print("ChromaDB already has data, skipping PDF load.")
+
+
 
 def search_trains(start_station: str, end_station: str):
     """
     Searches for trains between two stations and returns a JSON array of train details.
     """
     global _last_train_search_result
-    
+
     with app.app_context():
         trains = Train.query.filter(
             Train.start.ilike(f"%{start_station}%"),
             Train.end.ilike(f"%{end_station}%")
         ).all()
-        
+
         if not trains:
             result = json.dumps({
                 "status": "error",
@@ -48,7 +143,7 @@ def search_trains(start_station: str, end_station: str):
             })
             _last_train_search_result = None
             return result
-        
+
         train_list = []
         for train in trains:
             train_list.append({
@@ -62,13 +157,13 @@ def search_trains(start_station: str, end_station: str):
                 "seats": train.seats,
                 "price": train.price
             })
-        
+
         result_data = {
             "status": "success",
             "count": len(train_list),
             "trains": train_list
         }
-        
+
         _last_train_search_result = result_data
         return json.dumps(result_data)
 
@@ -78,34 +173,34 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
     Books tickets and returns a JSON object.
     """
     global _last_booking_result
-    
+
     with app.app_context():
         train = db.session.get(Train, train_id)
-        
+
         if not train:
             result = json.dumps({"status": "error", "message": "Train not found."})
             _last_booking_result = None
             return result
-        
+
         if train.seats < quantity:
             result = json.dumps({"status": "error", "message": f"Only {train.seats} seats remaining."})
             _last_booking_result = None
             return result
-        
+
         train_prefix = train.name[0].upper()
         assigned_seats = []
         current_seat_count = train.seats
-        
+
         for i in range(quantity):
             seat_num = current_seat_count - i
             assigned_seats.append(f"{train_prefix}{seat_num}")
-        
+
         total_cost = train.price * quantity
         pnr_raw = f"T{train.id}{random.randint(1000, 9999)}{quantity}"
-        
+
         train.seats -= quantity
         db.session.commit()
-        
+
         response_data = {
             "status": "success",
             "pnr": pnr_raw,
@@ -121,7 +216,7 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
                 "total_price": total_cost
             }
         }
-        
+
         _last_booking_result = response_data
         return json.dumps(response_data)
 
@@ -129,14 +224,14 @@ def book_ticket(train_id: int, quantity: int, name: str, mobile: str, gender: st
 def get_system_instruction():
     with app.app_context():
         trains = Train.query.all()
-        
+
         train_summary = f"Total trains in system: {len(trains)}\n"
         unique_routes = set()
         for t in trains:
             unique_routes.add(f"{t.start} → {t.end}")
-        
+
         train_summary += "Available routes:\n" + "\n".join(unique_routes)
-        
+
         return f"""
 # ROLE & PERSONA
 You are RailBot, the official Digital Concierge. You are professional and proactive.
@@ -154,18 +249,23 @@ Use the user's name if provided. If not, introduce yourself as a railway assista
 1. When user asks about trains or wants to travel, ask for Start and End stations if not provided.
 2. **MANDATORY**: Use the `search_trains` tool to find available trains.
 3. **NEVER** list trains in text or markdown. The UI will display train cards automatically.
-4. After calling `search_trains`, simply say: "Here are the available trains for your route " Do NOT ask for passenger details yet.
+4. After calling `search_trains`, simply say: "Here are the available trains for your route." Do NOT ask for passenger details yet.
 
 ## 3. Booking Workflow
 1. **After train is selected**: Immediately ask for Name, Gender, Mobile, and Number of Seats.
-2. **IMPORTANT**: When you see "[SYSTEM: User has selected train_id=X]" in the message, this means the user has ALREADY selected their train. DO NOT ask them to select again.
+2. **IMPORTANT**: When you see "[SYSTEM: User has selected train_id=X]" in the message, the user has ALREADY selected their train. DO NOT ask them to select again.
 3. **Collect remaining info**: If train is already selected, just collect any missing passenger details.
-4. **Tool Call**: Once you have train_id (from SYSTEM message) AND all passenger details (name, gender, mobile, seats) use  immediately call `book_ticket`.
+4. **Tool Call**: Once you have train_id (from SYSTEM message) AND all passenger details (name, gender, mobile, seats), immediately call `book_ticket`.
 5. **Validation**: Only confirm if the tool returns a "success" status.
 
 ## 4. After Booking Success
 When `book_ticket` returns success, simply say: "Your booking is confirmed! Your e-ticket is displayed below."
 DO NOT display ticket details in text. The UI will automatically show a formatted ticket card.
+
+## 5. Policy & Guidelines Questions
+- When a user asks about railway rules, cancellations, refunds, luggage, delays, concessions, complaints, or ANY policy-related topic, you MUST call the `retrieve_guidelines` tool with the user's question as the query.
+- Answer ONLY using what the tool returns. Do NOT make up policy information.
+- If the tool returns no relevant results, say: "I'm sorry, I don't have that information. Please contact railway support."
 
 # CRITICAL RULES
 - If you see train_id in a SYSTEM message, the user has already selected. Never ask "please select your train"
@@ -186,7 +286,6 @@ def home():
     return render_template('index.html', chats=reversed(history))
 
 
-
 def create_chat_session(user_message, train_id=None):
     """
     Creates a Gemini chat session with conversation history and context.
@@ -194,7 +293,7 @@ def create_chat_session(user_message, train_id=None):
     """
     past_chats = ChatHistory.query.order_by(ChatHistory.id.desc()).limit(6).all()
     history_for_gemini = []
-    
+
     for chat in reversed(past_chats):
         history_for_gemini.append(types.Content(
             role="user",
@@ -202,12 +301,12 @@ def create_chat_session(user_message, train_id=None):
         history_for_gemini.append(types.Content(
             role="model",
             parts=[types.Part.from_text(text=chat.bot)]))
-    
+
     if train_id:
         user_message_with_context = f"{user_message}\n[SYSTEM: User has selected train_id={train_id}. Use this train_id for booking.]"
     else:
         user_message_with_context = user_message
-    
+
     search_trains_declaration = types.FunctionDeclaration(
         name="search_trains",
         description="Searches for trains between two stations and returns a JSON array of train details.",
@@ -226,7 +325,7 @@ def create_chat_session(user_message, train_id=None):
             "required": ["start_station", "end_station"]
         }
     )
-    
+
     book_ticket_declaration = types.FunctionDeclaration(
         name="book_ticket",
         description="Books train tickets and returns a JSON object with booking confirmation.",
@@ -257,14 +356,34 @@ def create_chat_session(user_message, train_id=None):
             "required": ["train_id", "quantity", "name", "mobile", "gender"]
         }
     )
-    
-    railway_tool = types.Tool(
-        function_declarations=[search_trains_declaration, book_ticket_declaration]
-    )
-    
-    chat_session = client.chats.create(
-        model="gemini-3-flash-preview",
 
+    retrieve_guidelines_declaration = types.FunctionDeclaration(
+        name="retrieve_guidelines",
+        description=(
+            "Search the official railway policy PDF for rules, guidelines, and information. "
+            "Call this whenever the user asks about: cancellations, refunds, luggage/baggage rules, "
+            "train delays, compensation, concessions (senior/disabled/child), complaints, helpline, "
+            "tatkal booking, waitlisted tickets, seat reservations, berth types, fare rules, "
+            "or ANY other railway policy or regulation topic."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The user's question to search for in the railway guidelines"
+                }
+            },
+            "required": ["query"]
+        }
+    )
+
+    railway_tool = types.Tool(
+        function_declarations=[search_trains_declaration, book_ticket_declaration, retrieve_guidelines_declaration]
+    )
+
+    chat_session = client.chats.create(
+        model="gemini-2.5-flash",
         history=history_for_gemini,
         config=types.GenerateContentConfig(
             system_instruction=get_system_instruction(),
@@ -272,73 +391,75 @@ def create_chat_session(user_message, train_id=None):
             temperature=0.7
         )
     )
-    
+
     return chat_session, user_message_with_context
 
 
 @app.route('/chat/stream', methods=['POST'])
 def chat_stream():
-    """Streaming endpoint for real-time responses"""
     global _last_booking_result, _last_train_search_result
     _last_booking_result = None
     _last_train_search_result = None
-    
+
     user_input = request.json.get('message')
     train_id = request.json.get('train_id')
-    
+
     def generate():
         chat_session, user_message_with_context = create_chat_session(user_input, train_id)
-        
+
         full_response = ""
-        
-        for chunk in chat_session.send_message_stream(user_message_with_context):
-            if chunk.candidates and chunk.candidates[0].content.parts:
-                for part in chunk.candidates[0].content.parts:
-                    if hasattr(part, 'function_call') and part.function_call:
-                        func_call = part.function_call
-                        
-                        if func_call.name == "search_trains":
-                            result = search_trains(
-                                func_call.args.get("start_station"),
-                                func_call.args.get("end_station")
-                            )
-                            function_response_part = types.Part.from_function_response(
-                                name="search_trains",
-                                response={"result": result}
-                            )
-                            for response_chunk in chat_session.send_message_stream(function_response_part):
-                                if response_chunk.text:
-                                    full_response += response_chunk.text
-                                    yield f"data: {json.dumps({'type': 'text', 'content': response_chunk.text})}\n\n"
-                                    
-                        elif func_call.name == "book_ticket":
-                            result = book_ticket(
-                                func_call.args.get("train_id"),
-                                func_call.args.get("quantity"),
-                                func_call.args.get("name"),
-                                func_call.args.get("mobile"),
-                                func_call.args.get("gender")
-                            )
-                            function_response_part = types.Part.from_function_response(
-                                name="book_ticket",
-                                response={"result": result}
-                            )
-                            for response_chunk in chat_session.send_message_stream(function_response_part):
-                                if response_chunk.text:
-                                    full_response += response_chunk.text
-                                    yield f"data: {json.dumps({'type': 'text', 'content': response_chunk.text})}\n\n"
-                    
-                    elif hasattr(part, 'text') and part.text:
-                        full_response += part.text
-                        yield f"data: {json.dumps({'type': 'text', 'content': part.text})}\n\n"
+
+        def execute_tool(func_call):
+            name = func_call.name
+            args = func_call.args or {}
+
+            if name == "search_trains":
+                result = search_trains(args.get("start_station"), args.get("end_station"))
+                return types.Part.from_function_response(name=name, response={"result": result})
+
+            elif name == "book_ticket":
+                result = book_ticket(
+                    args.get("train_id"), args.get("quantity"),
+                    args.get("name"), args.get("mobile"), args.get("gender")
+                )
+                return types.Part.from_function_response(name=name, response={"result": result})
+
+            elif name == "retrieve_guidelines":
+                context = retrieve_guidelines(args.get("query", ""))
+                return types.Part.from_function_response(name=name, response={"context": context})
             
-            elif chunk.text:
-                full_response += chunk.text
-                yield f"data: {json.dumps({'type': 'text', 'content': chunk.text})}\n\n"
-        
+        def handle_stream(stream):
+            nonlocal full_response
+            collected_text = []
+            collected_func_calls = []
+
+            for chunk in stream:
+                if chunk.candidates and chunk.candidates[0].content.parts:
+                    for part in chunk.candidates[0].content.parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            collected_func_calls.append(part.function_call)
+                        elif hasattr(part, 'text') and part.text:
+                            collected_text.append(part.text)
+                elif chunk.text:
+                    collected_text.append(chunk.text)
+
+            if collected_func_calls:
+                response_parts = [execute_tool(fc) for fc in collected_func_calls]
+                followup_stream = chat_session.send_message_stream(
+                    response_parts if len(response_parts) > 1 else response_parts[0]
+                )
+                yield from handle_stream(followup_stream)
+
+            else:
+                for text in collected_text:
+                    full_response += text
+                    yield f"data: {json.dumps({'type': 'text', 'content': text})}\n\n"
+    
+        yield from handle_stream(chat_session.send_message_stream(user_message_with_context))
+
         is_booked = _last_booking_result is not None and _last_booking_result.get("status") == "success"
         has_trains = _last_train_search_result is not None and _last_train_search_result.get("status") == "success"
-        
+
         if is_booked:
             ticket_data = {
                 "pnr": _last_booking_result["pnr"],
@@ -359,45 +480,26 @@ def chat_stream():
                 }
             }
             yield f"data: {json.dumps({'type': 'ticket', 'content': ticket_data})}\n\n"
-        
+
         if has_trains:
             yield f"data: {json.dumps({'type': 'trains', 'content': _last_train_search_result['trains']})}\n\n"
-        
+
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        
+
         ticket_json = None
         trains_json = None
-        
+
         if is_booked:
             ticket_json = json.dumps({
                 "pnr": _last_booking_result["pnr"],
-                "passenger": {
-                    "name": _last_booking_result["passenger"]["name"],
-                    "gender": _last_booking_result["passenger"]["gender"],
-                    "mobile": _last_booking_result["passenger"]["mobile"],
-                },
-                "train": {
-                    "name": _last_booking_result["train_details"]["name"],
-                    "route": _last_booking_result["train_details"]["route"],
-                    "timing": _last_booking_result["train_details"]["timing"],
-                },
-                "booking": {
-                    "seats": _last_booking_result["booking_details"]["seats_count"],
-                    "seat_numbers": _last_booking_result["booking_details"]["seat_numbers"],
-                    "total_price": _last_booking_result["booking_details"]["total_price"],
-                }
+                "passenger": _last_booking_result["passenger"],
+                "train": _last_booking_result["train_details"],
+                "booking": _last_booking_result["booking_details"]
             })
-            
 
-            previous_train_chat = ChatHistory.query.filter(
-                ChatHistory.train_results.isnot(None),
-                ChatHistory.booked_ticket.is_(None)
-            ).order_by(ChatHistory.id.desc()).first()
-            
-        
         if has_trains:
             trains_json = json.dumps(_last_train_search_result["trains"])
-        
+
         new_chat = ChatHistory(
             user=user_input,
             bot=full_response,
@@ -406,7 +508,7 @@ def chat_stream():
         )
         db.session.add(new_chat)
         db.session.commit()
-    
+
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 
@@ -430,11 +532,11 @@ def api_clear_chat():
 def add_train():
     data = request.json
     required_fields = ['name', 'start', 'end', 'departure', 'arrival', 'duration', 'seats', 'price']
-    
+
     for field in required_fields:
         if field not in data:
             return jsonify({"error": f"Missing field: {field}"})
-    
+
     new_train = Train(
         name=data['name'],
         start=data['start'],
@@ -447,7 +549,7 @@ def add_train():
     )
     db.session.add(new_train)
     db.session.commit()
-    
+
     return jsonify({"message": "Train added", "id": new_train.id})
 
 

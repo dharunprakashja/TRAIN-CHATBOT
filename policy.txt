@@ -1,0 +1,35 @@
+    Railway Cancellation and Refund Policy
+    
+    Cancellation Timeline and Refunds:
+    1. Cancellations made 24 hours or more before departure: 75% refund of ticket price
+    2. Cancellations made between 12-24 hours before departure: 50% refund of ticket price
+    3. Cancellations made less than 12 hours before departure: 25% refund of ticket price
+    4. No refund will be provided for no-shows (passengers who don't board the train)
+    
+    Refund Processing Details:
+    - All refunds are processed within 7-10 business days from the date of cancellation
+    - Refund will be credited to the original payment method used for booking
+    - A processing fee of ₹50 applies to all cancellations
+    - For cash bookings, refund will be issued as a railway credit note
+    
+    Special Circumstances for Full Refund:
+    - Medical emergencies: Full refund available with a valid doctor's certificate submitted within 48 hours
+    - Train cancellations by railway: Full refund is automatically processed within 3-5 business days
+    - Natural disasters or government restrictions: Case-by-case review, typically full refund granted
+    - Death in family: Full refund with death certificate
+    
+    Ticket Modification Policy:
+    - Date changes allowed up to 24 hours before departure with ₹100 modification fee
+    - Name changes not permitted once booking is confirmed
+    - Class upgrades available subject to availability, price difference applies
+    - Downgrades result in refund of difference minus ₹150 processing fee
+    
+    Group Booking Cancellations:
+    - Groups of 4+ passengers: Cancellation charges apply per person
+    - 25% group discount may be forfeited if partial cancellation made
+    - Full group cancellations follow standard refund policy
+    
+    Contact Information:
+    - Customer service: 1800-XXX-XXXX (24/7)
+    - Email: support@railway.com
+    - Refund queries typically resolved within 24 hours
